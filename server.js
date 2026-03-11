@@ -21,11 +21,6 @@ app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripe
 
 app.use(express.json());
 
-app.use((req, res, next) => {
-    console.log(`[REQ] ${req.method} ${req.path} | IP: ${req.ip}`);
-    next();
-})
-
 app.use(indexRoute);
 
 startCronJobs();
