@@ -1,0 +1,102 @@
+import mongoose from "mongoose";
+
+const saleSchema = new mongoose.Schema({
+    user_id: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'users', 
+        required: true
+    },
+    user_name: { type: String },
+    user_image: { type: String },
+
+    brand: {
+        id: { type: Number, required: true },
+        name: { type: String, required: true }
+    },
+    model: {
+        id: { type: Number, required: true },
+        name: { type: String, required: true }
+    },
+    engine: {
+        capacity: { type: String, required: true },
+        fuel_type: { type: String, required: true }
+    },
+
+    price: { type: Number, required: true },
+    negotiable: { type: Boolean, default: false },
+    mileage: { type: Number, required: true },
+    production_year: { type: Number, required: true },
+    vin: { type: String },
+
+    body_type: { type: String, required: true },
+    color: { type: String, required: true },
+    transmission: { type: String, required: true },
+    drivetrain: { type: String, required: true },
+    pollution_standard: { type: String, required: true },
+    steering_wheel: { type: String, enum: ['left', 'right'], default: 'left' },
+
+    location: {
+        county: { type: String, required: true },
+        city: { type: String, required: true },
+    },
+
+    registration_status: { type: String, required: true },
+    exchange_accepted: { type: Boolean, default: false },
+    for_dismante: { type: Boolean, default: false },
+
+    phone_number: { type: String, required: true },
+    description: { type: String, default: "" },
+
+    media: [
+        {
+            url: { type: String, required: true },
+            type: { type: String, enum: ['image', 'video'], default: 'image' },
+            public_id: { type: String },
+            zoom_level: { type: Number, default: 1 }
+        }
+    ],
+
+    likes_count: { type: Number, default: 0 },
+    liked_by: [{ 
+        user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'users' },
+        liked_at: { type: Date, default: Date.now }
+    }],
+    
+    allow_comments: { type: Boolean, default: true },
+    comments_count: { type: Number, default: 0 },
+
+    is_active: { type: Boolean, default: false },
+    is_promoted: { type: Boolean, default: false },
+    views: { type: Number, default: 0 },
+
+    status: { 
+        type: String, 
+        enum: ['pending_payment', 'active', 'grace_period', 'media_processing', 'failed_media'], 
+        default: 'pending_payment' 
+    },
+    paid_until: { type: Date },
+    expires_at: { type: Date },
+    stripe_subscription_id: { type: String, default: null }
+
+}, { 
+    timestamps: true,
+    collection: 'sales' 
+});
+
+saleSchema.index({ "brand.id": 1 });
+saleSchema.index({ "model.id": 1 });
+saleSchema.index({ price: 1 });
+saleSchema.index({ production_year: -1 });
+saleSchema.index({ "location.county": 1 });
+saleSchema.index({ status: 1 });
+saleSchema.index({ expires_at: 1 });
+saleSchema.index({ steering_wheel: 1 });
+saleSchema.index({ negotiable: 1 });
+saleSchema.index({ is_active: 1, _id: -1 }); // ← pentru feed (query principal)
+saleSchema.index({ user_id: 1, _id: -1 });   // ← pentru my-posts
+saleSchema.index({ "liked_by.user_id": 1 });  // ← pentru liked aggregation
+saleSchema.index({ is_active: 1, likes_count: -1, _id: -1 }); // ← pentru search
+
+const sales = mongoose.models.sales || mongoose.model("sales", saleSchema);
+
+export default sales;
