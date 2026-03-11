@@ -78,7 +78,7 @@ const rateLimitRedis = new Redis(process.env.REDIS_URL, {
 
 export const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000 * 2,
-    limit: 16,
+    limit: 30,
     legacyHeaders: false,
     store: new RedisStore({
         sendCommand: (...args) => rateLimitRedis.call(...args),
@@ -88,7 +88,7 @@ export const loginLimiter = rateLimit({
 
 export const fetchLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 500,
+    limit: 800,
     legacyHeaders: false,
     store: new RedisStore({
         sendCommand: (...args) => rateLimitRedis.call(...args),
@@ -96,8 +96,6 @@ export const fetchLimiter = rateLimit({
     message: "Prea multe incercari. Te rugam incearca mai tarziu."
 });
 
-rateLimitRedis.on('error', (err) => console.error(`X RateLimit Redis Error: `, err));
-rateLimitRedis.on('connect', () => console.log('`RateLimit Redis conectat'))
 
 // --- MIDDLEWARE ---
 export const authUser = (req, res, next) => {
