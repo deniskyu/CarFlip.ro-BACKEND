@@ -3,7 +3,7 @@ module.exports = {
         {
             name: 'backend',
             script: './server.js',
-            instances: 7,          // 7 clone-uri, câte unul per CPU liber
+            instances: 12,          // 7 clone-uri, câte unul per CPU liber
             exec_mode: 'cluster',  // ← magia: PM2 face fork + load balancing
             max_memory_restart: '1500M',
             env: {

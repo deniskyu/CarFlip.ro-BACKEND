@@ -96,6 +96,9 @@ export const fetchLimiter = rateLimit({
     message: "Prea multe incercari. Te rugam incearca mai tarziu."
 });
 
+rateLimitRedis.on('error', (err) => console.error(`X RateLimit Redis Error: `, err));
+rateLimitRedis.on('connect', () => console.log('`RateLimit Redis conectat'))
+
 // --- MIDDLEWARE ---
 export const authUser = (req, res, next) => {
     try {
