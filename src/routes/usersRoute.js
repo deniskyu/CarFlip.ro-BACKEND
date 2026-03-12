@@ -15,8 +15,8 @@ import Notifications from '../models/notificationModel.js';
 import Conversation from '../models/conversationModel.js';
 import Message from '../models/messageModel.js';
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
-import Stripe from 'stripe';
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+//import Stripe from 'stripe';
+//const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 
 // Configurare R2 (copiază din userProfiles dacă nu e deja partajat)
@@ -613,13 +613,13 @@ userRoute.delete('/api/user/delete-account',
             const saleIds = userSales.map(s => s._id);
 
             for (const sale of userSales) {
-                if (sale.stripe_subscription_id) {
+                /*if (sale.stripe_subscription_id) {
                     try {
                         await stripe.subscriptions.cancel(sale.stripe_subscription_id);
                     } catch (err) {
                         console.warn(`[Delete] Stripe skip (${sale.stripe_subscription_id}):`, err.message);
                     }
-                }
+                }*/
 
                 if (sale.media && sale.media.length > 0) {
                     for (const file of sale.media) {

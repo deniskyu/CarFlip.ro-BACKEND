@@ -3,14 +3,14 @@ import sales from '../models/salesModel.js';
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import Comments from '../models/commentModel.js';
 import SeenPost from '../models/seenPostsModel.js';
-import Stripe from 'stripe';
+//import Stripe from 'stripe';
 import fs from 'fs-extra';
 import path from 'path';
 import process from 'process';
 import Conversation from '../models/conversationModel.js';
 import Message from '../models/messageModel.js';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+//const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const r2 = new S3Client({
     region: 'auto',
@@ -85,7 +85,7 @@ const startCronJobs = () => {
             if (salesToDelete.length > 0) {
                 const mediaToDelete = [];
                 const saleIdsToDelete = [];
-                const stripeSubsToCancel = [];
+                //const stripeSubsToCancel = [];
 
                 for (let sale of salesToDelete) {
                     saleIdsToDelete.push(sale._id);
@@ -94,15 +94,15 @@ const startCronJobs = () => {
                             if (mediaItem.public_id) mediaToDelete.push(mediaItem.public_id);
                         }
                     }
-                    if (sale.stripe_subscription_id) stripeSubsToCancel.push(sale.stripe_subscription_id);
+                    //if (sale.stripe_subscription_id) stripeSubsToCancel.push(sale.stripe_subscription_id);
                 }
 
-                if (stripeSubsToCancel.length > 0) {
+                /*if (stripeSubsToCancel.length > 0) {
                     const subChunks = chunkArray(stripeSubsToCancel, 20);
                     for (const chunk of subChunks) {
                         await Promise.all(chunk.map(id => stripe.subscriptions.cancel(id).catch(() => {})));
                     }
-                }
+                }*/
 
                 if (mediaToDelete.length > 0) {
                     const chunks = chunkArray(mediaToDelete, 50);

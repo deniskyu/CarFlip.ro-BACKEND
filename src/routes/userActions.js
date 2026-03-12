@@ -16,8 +16,8 @@ import { triggerSearchAlerts } from './searchAlertsRoute.js';
 import { addMediaToQueue } from '../mediaProcessing/mediaQueue.js'; // <--- NOU: Legătura cu Coada
 import { sendAndSaveNotification } from '../services/notificationService.js';
 import { addMediaUpdateToQueue } from '../mediaProcessing/mediaQueue.js';
-import Stripe from 'stripe';
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+//import Stripe from 'stripe';
+//const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const userActions = Router();
 
@@ -202,7 +202,7 @@ userActions.post('/api/sale/post/free',
 );
 
 // 🚀 RUTA MONSTRU: POSTAREA ANUNȚULUI
-userActions.post('/api/sale/post',
+/*userActions.post('/api/sale/post',
     authUser,
     fetchLimiter,
     upload.array('mediaFiles', 10),
@@ -274,7 +274,7 @@ userActions.post('/api/sale/post',
             let expiresAt = addDays(paidUntil, 10);
             let requiresPayment = true;
             let discountApplied = 0;
-            let validCode = null; // Salvăm referința codului*/
+            let validCode = null; // Salvăm referința codului
 
             // 🔥 FIX 1: Doar citim codul de reducere, NU îl incrementăm încă!
             if (discount_code) {
@@ -369,10 +369,8 @@ userActions.post('/api/sale/post',
                 await newSale.save();
             }
 
-            // Punem media în coadă
             await addMediaToQueue(newSale._id, req.files, parsedMetadata);
 
-            // 🔥 FIX 1: Acum că absolut totul a reușit (bază de date, Stripe, BullMQ), incrementăm codul de reducere fizic!
             if (validCode) {
                 await discountCodes.findByIdAndUpdate(validCode._id, { $inc: { current_uses: 1 } });
             }
@@ -389,9 +387,10 @@ userActions.post('/api/sale/post',
         }
     }
 );
+*/
 
 
-userActions.post('/api/discount/validate/:code', authUser, fetchLimiter, async (req, res) => {
+/*userActions.post('/api/discount/validate/:code', authUser, fetchLimiter, async (req, res) => {
     try {
         const { code } = req.params;
 
@@ -418,7 +417,7 @@ userActions.post('/api/discount/validate/:code', authUser, fetchLimiter, async (
         console.error("Eroare la validarea codului:", error);
         return res.status(500).json({ success: false, message: "Eroare la validarea codului." });
     }
-});
+});*/
 
 userActions.get('/api/sales/feed', authUser, fetchLimiter, async (req, res) => {
     try {
@@ -1474,7 +1473,7 @@ userActions.delete('/api/sales/remove/:id', authUser, fetchLimiter, async (req, 
         }
 
         // 3. Curățenia Financiară: Anulăm subscripția Stripe (dacă există)
-        if (sale.stripe_subscription_id) {
+        /*if (sale.stripe_subscription_id) {
             try {
                 // Se folosește metoda cancel pentru a opri imediat abonamentul
                 await stripe.subscriptions.cancel(sale.stripe_subscription_id);
@@ -1482,7 +1481,7 @@ userActions.delete('/api/sales/remove/:id', authUser, fetchLimiter, async (req, 
                 // Dacă dă eroare (ex: deja anulat), o logăm doar în consolă, dar mergem mai departe
                 console.warn(`Eroare anulare Stripe pentru subscripția ${sale.stripe_subscription_id}:`, stripeError.message);
             }
-        }
+        }*/
 
         // 4. Curățenia Găzduirii: Ștergem fișierele Media din Cloudflare R2
         if (sale.media && sale.media.length > 0) {

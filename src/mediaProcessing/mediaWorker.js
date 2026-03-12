@@ -6,8 +6,8 @@ import fs from 'fs-extra';
 import path from 'path';
 import sales from '../models/salesModel.js'; 
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'; 
-import Stripe from 'stripe';
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+//import Stripe from 'stripe';
+//const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
@@ -308,7 +308,7 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
 
             const failedSale = await sales.findById(saleId); 
             
-            if (failedSale && failedSale.stripe_subscription_id) {
+            /*if (failedSale && failedSale.stripe_subscription_id) {
                 try {
                     console.log(`💰 Inițiem refund pentru subscripția: ${failedSale.stripe_subscription_id}`);
                     
@@ -353,7 +353,7 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                 } catch (stripeErr) {
                     console.error("⚠️ Eroare generală la operațiunile Stripe:", stripeErr.message);
                 }
-            }
+            }*/
 
             // Ștergem și fișierele originale la ultima încercare eșuată — nu mai sunt utile
             for (const file of files) {

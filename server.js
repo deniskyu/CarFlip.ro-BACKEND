@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import indexRoute from './src/routes/indexRoute.js';
 import cors from 'cors';
-import stripeWebhookRoute from './src/routes/stripeWebhookRoute.js';
+//import stripeWebhookRoute from './src/routes/stripeWebhookRoute.js';
 import startCronJobs from './src/cronJobs/cronJobs.js';
 import { createServer } from 'http';
 import { initSocket } from './src/socket/socketManager.js';
@@ -17,7 +17,7 @@ app.set('trust proxy', 1);
 
 app.use(cors());
 
-app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhookRoute);
+//app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhookRoute);
 
 app.use(express.json());
 

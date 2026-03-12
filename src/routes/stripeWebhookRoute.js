@@ -1,4 +1,4 @@
-import { Router } from 'express';
+/*import { Router } from 'express';
 import Stripe from 'stripe';
 import sales from '../models/salesModel.js';
 import { addMonths, addDays } from 'date-fns';
@@ -123,4 +123,4 @@ stripeWebhookRoute.post('/', async (req, res) => {
     res.json({ received: true });
 });
 
-export default stripeWebhookRoute;
+export default stripeWebhookRoute;*/
