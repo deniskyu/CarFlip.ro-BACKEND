@@ -78,7 +78,7 @@ const rateLimitRedis = new Redis(process.env.REDIS_URL, {
 
 export const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000 * 2,
-    limit: 30,
+    limit: 28,
     legacyHeaders: false,
     store: new RedisStore({
         sendCommand: (...args) => rateLimitRedis.call(...args),
@@ -88,7 +88,7 @@ export const loginLimiter = rateLimit({
 
 export const fetchLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 800,
+    limit: 3000,
     legacyHeaders: false,
     store: new RedisStore({
         sendCommand: (...args) => rateLimitRedis.call(...args),
