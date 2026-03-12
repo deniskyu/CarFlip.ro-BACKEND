@@ -61,7 +61,7 @@ const client = mailgun.client({ username: 'api', key: process.env.MAILGUN_KEY, u
 
 export async function sendMail({ to, subject, html }) {
     return client.messages.create(process.env.MAILGUN_DOMAIN, {
-        from: `Car Swipe <no-reply@${process.env.MAILGUN_DOMAIN}>`,
+        from: `CarFlip.ro <no-reply@${process.env.MAILGUN_DOMAIN}>`,
         to,
         subject,
         html,
