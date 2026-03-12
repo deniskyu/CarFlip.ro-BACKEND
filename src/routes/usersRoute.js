@@ -136,6 +136,8 @@ userRoute.post('/api/user/register',
                 return res.json({ success: false, message: "Numele de utilizator este deja folosit." });
             }
 
+            await users.findByIdAndDelete(existingUsernamel._id);
+
             // 2. Verificăm starea email-ului
             let user = await users.findOne({ email: lowerEmail });
 
@@ -190,6 +192,9 @@ userRoute.post('/api/user/register',
             return res.json({ success: true, message: "Codul de verificare a fost trimis pe mail." });
 
         } catch (er) {
+            if (er.code === 11000){
+                return res.json({success: false, message: "Numele de utilizator este deja folosit."});
+            }
             console.error("Register Error:", er);
             return res.json({ success: false, message: "A apărut o eroare la înregistrare. Vă rugăm să încercați din nou mai târziu." });
         }
