@@ -57,7 +57,7 @@ const compareString = async (string, hashedString) => {
 }
 
 const mailgun = new Mailgun(formData);
-const client = mailgun.client({ username: 'api', key: process.env.MAILGUN_KEY, url: 'https://api.eu/mailgun.net' });
+const client = mailgun.client({ username: 'api', key: process.env.MAILGUN_KEY, url: 'https://api.eu.mailgun.net' });
 
 export async function sendMail({ to, subject, html }) {
     return client.messages.create(process.env.MAILGUN_DOMAIN, {
