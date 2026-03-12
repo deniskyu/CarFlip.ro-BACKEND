@@ -131,7 +131,7 @@ userRoute.post('/api/user/register',
         try {
             // 1. Verificăm unicitatea Username-ului PRIMA DATĂ, indiferent de email
             const existingUsername = await users.findOne({ username });
-            if (existingUsername && existingUsername.email !== lowerEmail) {
+            if (existingUsername && existingUsername.email !== lowerEmail || existingUsername.isVerified) {
                 // Dacă username-ul e luat de ALT email, dăm reject clar
                 return res.json({ success: false, message: "Numele de utilizator este deja folosit." });
             }
