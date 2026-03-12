@@ -82,7 +82,8 @@ const rateLimitRedisFetch = new Redis(process.env.REDIS_URL, {
     enableReadyCheck: true,
 });
 
-await rateLimitRedis.ping();
+await rateLimitRedisLogin.ping();
+await rateLimitRedisFetch.ping();
 console.log('RateLimit Redis PING OK');
 
 export const loginLimiter = rateLimit({
