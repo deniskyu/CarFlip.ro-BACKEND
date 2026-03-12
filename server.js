@@ -13,13 +13,18 @@ dotenv.config();
 const app = express();
 const httpServer = createServer(app)
 
-app.set('trust proxy', 1);
+app.set('trust proxy', 2);
 
 app.use(cors());
 
 //app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhookRoute);
 
 app.use(express.json());
+
+app.use((req, res, next) => {
+    console.log('IP:', req.ip);
+    next();
+});
 
 app.use(indexRoute);
 
