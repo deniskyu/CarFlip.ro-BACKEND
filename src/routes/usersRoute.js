@@ -72,26 +72,35 @@ import { RedisStore } from 'rate-limit-redis';
 import Redis from 'ioredis';
 
 // Conexiune separată pentru rate limiter (nu amesteca cu BullMQ)
-const rateLimitRedis = new Redis(process.env.REDIS_URL, {
-    maxRetriesPerRequest: null
+const rateLimitRedisLogin = new Redis(process.env.REDIS_URL, {
+    maxRetriesPerRequest: 28,
+    enableReadyCheck: true,
 });
+
+const rateLimitRedisFetch = new Redis(process.env.REDIS_URL, {
+    maxRetriesPerRequest: 4000,
+    enableReadyCheck: true,
+});
+
+await rateLimitRedis.ping();
+console.log('RateLimit Redis PING OK');
 
 export const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000 * 2,
     limit: 28,
     legacyHeaders: false,
     store: new RedisStore({
-        sendCommand: (...args) => rateLimitRedis.call(...args),
+        sendCommand: (...args) => rateLimitRedisLogin.call(...args),
     }),
     message: "Prea multe incercari. Te rugam incearca mai tarziu."
 });
 
 export const fetchLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 3000,
+    limit: 4000,
     legacyHeaders: false,
     store: new RedisStore({
-        sendCommand: (...args) => rateLimitRedis.call(...args),
+        sendCommand: (...args) => rateLimitRedisFetch.call(...args),
     }),
     message: "Prea multe incercari. Te rugam incearca mai tarziu."
 });
