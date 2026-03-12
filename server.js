@@ -21,6 +21,13 @@ app.use(cors());
 
 app.use(express.json());
 
+const version = 1;
+
+app.get('/api/app/version', (req, res) => {
+    res.status(200).json({
+        version, success: true 
+    });
+});
 
 app.use(indexRoute);
 
