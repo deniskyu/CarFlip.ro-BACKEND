@@ -83,7 +83,7 @@ console.log('RateLimit Redis PING OK');
 
 export const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000 * 2,
-    limit: 28,
+    limit: 22,
     legacyHeaders: false,
     store: new RedisStore({
         sendCommand: (...args) => rateLimitRedis.call(...args),
@@ -94,7 +94,7 @@ export const loginLimiter = rateLimit({
 
 export const fetchLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 5000,
+    limit: 4800,
     legacyHeaders: false,
     store: new RedisStore({
         sendCommand: (...args) => rateLimitRedis.call(...args),
