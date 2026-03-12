@@ -136,7 +136,7 @@ userRoute.post('/api/user/register',
                 return res.json({ success: false, message: "Numele de utilizator este deja folosit." });
             }
 
-            await users.findByIdAndDelete(existingUsernamel._id);
+            await users.findByIdAndDelete(existingUsername._id);
 
             // 2. Verificăm starea email-ului
             let user = await users.findOne({ email: lowerEmail });
