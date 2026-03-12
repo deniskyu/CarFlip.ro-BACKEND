@@ -87,16 +87,18 @@ export const loginLimiter = rateLimit({
     legacyHeaders: false,
     store: new RedisStore({
         sendCommand: (...args) => rateLimitRedis.call(...args),
+        prefix: "r1:login:",
     }),
     message: "Prea multe incercari. Te rugam incearca mai tarziu."
 });
 
 export const fetchLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 4000,
+    limit: 5000,
     legacyHeaders: false,
     store: new RedisStore({
         sendCommand: (...args) => rateLimitRedis.call(...args),
+        prefix: "r1:fetch:",
     }),
     message: "Prea multe incercari. Te rugam incearca mai tarziu."
 });

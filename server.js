@@ -21,10 +21,6 @@ app.use(cors());
 
 app.use(express.json());
 
-app.use((req, res, next) => {
-    console.log('IP:', req.ip);
-    next();
-});
 
 app.use(indexRoute);
 
