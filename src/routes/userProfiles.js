@@ -110,8 +110,8 @@ userProfiles.get('/api/user/my-posts', authUser, fetchLimiter, async (req, res) 
 
             const postsWithLikeStatus = userPosts.map(doc => {
                 const postObj = doc.toObject({ getters: true, virtuals: true });
-                // Trebuie să extragem user_id din noul array de obiecte liked_by
                 const likedByStrings = postObj.liked_by ? postObj.liked_by.map(like => like.user_id.toString()) : [];
+                delete postObj.liked_by;
                 return {
                     ...postObj,
                     hasLiked: likedByStrings.includes(currentUserId)
@@ -182,18 +182,20 @@ userProfiles.get('/api/user/my-posts', authUser, fetchLimiter, async (req, res) 
             // 6. Populăm informațiile userului care a creat anunțul (deoarece aggregate nu suportă .populate direct pe modelul ref)
             await sales.populate(userPosts, { path: 'user_id', select: 'username icon' });
 
-            const postsWithLikeStatus = userPosts.map(post => {
-                return {
-                    ...post,
-                    hasLiked: true // Evident, dacă e în lista de liked, e true
-                };
-            });
-
             let nextCursor = null;
             if (userPosts.length === limit) {
                 // Returnăm timestamp-ul ultimului like ca noul cursor
                 nextCursor = userPosts[userPosts.length - 1].my_like_date.getTime(); 
             }
+
+            const postsWithLikeStatus = userPosts.map(post => {
+                delete post.liked_by;
+                delete post.my_like_date;
+                return {
+                    ...post,
+                    hasLiked: true
+                };
+            });
 
             return res.json({ 
                 success: true, 
@@ -331,12 +333,9 @@ userProfiles.get('/api/sales/user-profile/:userId', authUser, fetchLimiter, asyn
         }
 
         const postsWithLikeStatus = userPosts.map(doc => {
-            // Convertim în obiect simplu păstrând imaginile corecte
             const postObj = doc.toObject({ getters: true, virtuals: true });
-            
-            // Verificăm dacă TU ai dat like
             const likedByStrings = postObj.liked_by ? postObj.liked_by.map(like => like.user_id.toString()) : [];
-            
+            delete postObj.liked_by;
             return {
                 ...postObj,
                 hasLiked: likedByStrings.includes(currentUserId)

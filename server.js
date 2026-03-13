@@ -7,12 +7,14 @@ import cors from 'cors';
 import startCronJobs from './src/cronJobs/cronJobs.js';
 import { createServer } from 'http';
 import { initSocket } from './src/socket/socketManager.js';
+import helmet from 'helmet';
 
 dotenv.config();
 
 const app = express();
 const httpServer = createServer(app)
 
+app.use(helmet());
 app.set('trust proxy', 2);
 
 app.use(cors());

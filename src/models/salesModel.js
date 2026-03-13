@@ -90,8 +90,8 @@ saleSchema.index({ production_year: -1 });
 saleSchema.index({ "location.county": 1 });
 saleSchema.index({ status: 1 });
 saleSchema.index({ expires_at: 1 });
-saleSchema.index({ steering_wheel: 1 });
-saleSchema.index({ negotiable: 1 });
+//saleSchema.index({ steering_wheel: 1 });
+//saleSchema.index({ negotiable: 1 });
 saleSchema.index({ is_active: 1, _id: -1 }); // ← pentru feed (query principal)
 saleSchema.index({ user_id: 1, _id: -1 });   // ← pentru my-posts
 saleSchema.index({ "liked_by.user_id": 1 });  // ← pentru liked aggregation

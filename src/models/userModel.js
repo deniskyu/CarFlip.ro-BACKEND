@@ -99,6 +99,7 @@ const userSchema = new mongoose.Schema({
     minimize: false, 
     timestamps: true 
 });
+userSchema.index({ "refreshTokens.token": 1 });
 
 const users = mongoose.models.users || mongoose.model("users", userSchema);
 export default users;

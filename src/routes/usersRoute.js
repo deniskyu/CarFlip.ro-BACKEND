@@ -416,8 +416,6 @@ userRoute.post('/api/user/forgotpassword',
 
         try {
             const user = await users.findOne({ email: lowerEmail });
-            if(!user)
-                return res.json({success: false, message: "Emailul nu exista."})
             
             // SECURITATE: Prevenim "Email Enumeration" (Hackerii nu trebuie să afle dacă un email e înregistrat sau nu).
             // Dăm același mesaj de succes indiferent de rezultat.

@@ -777,7 +777,7 @@ userActions.get('/api/sales/search', authUser, fetchLimiter, async (req, res) =>
         if (body_type) query.body_type = safeRegex(body_type);
         if (transmission) query.transmission = safeRegex(transmission);
         if (pollution_standard) query.pollution_standard = safeRegex(pollution_standard); 
-        if (registration_status) query.registration_status = safeRegex(registration_status);
+        if (registration_status) query.registration_status = registration_status.trim();
         if (county) query['location.county'] = safeRegex(county);
         if (city) query['location.city'] = safeRegex(city);
 
@@ -984,7 +984,7 @@ userActions.get('/api/sales/search', authUser, fetchLimiter, async (req, res) =>
         if (body_type) query.body_type = safeRegex(body_type);
         if (transmission) query.transmission = safeRegex(transmission);
         if (pollution_standard) query.pollution_standard = safeRegex(pollution_standard); 
-        if (registration_status) query.registration_status = safeRegex(registration_status);
+        if (registration_status) query.registration_status = registration_status.trim();
         if (county) query['location.county'] = safeRegex(county);
         if (city) query['location.city'] = safeRegex(city);
 
@@ -1296,19 +1296,34 @@ userActions.get('/api/sales/comments/:sale_id', authUser, fetchLimiter, async (r
             .populate('user_id', 'username icon')
             .lean();
 
-        const commentsWithDetails = await Promise.all(comments.map(async (c) => {
-            const replyCount = await Comments.countDocuments({ parent_id: c._id, is_active: true, user_id: { $nin: excludedUserIds } });
-            const likedByStrings = c.liked_by ? c.liked_by.map(id => id.toString()) : [];
-            const hasLiked = likedByStrings.includes(userId);
+            const commentIds = comments.map(c => c._id);
 
-            return {
-                ...c,
-                reply_count: replyCount,
-                has_liked: hasLiked,
-                user_name: c.user_id?.username || "Utilizator șters",
-                user_image: c.user_id?.icon || null
-            };
-        }));
+            const replyCounts = await Comments.aggregate([
+                { 
+                    $match: { 
+                        parent_id: { $in: commentIds }, 
+                        is_active: true, 
+                        user_id: { $nin: excludedUserIds.map(id => new mongoose.Types.ObjectId(id)) } 
+                    } 
+                },
+                { $group: { _id: '$parent_id', count: { $sum: 1 } } }
+            ]);
+            
+            const replyMap = {};
+            for (const r of replyCounts) {
+                replyMap[r._id.toString()] = r.count;
+            }
+            
+            const commentsWithDetails = comments.map(c => {
+                const likedByStrings = c.liked_by ? c.liked_by.map(id => id.toString()) : [];
+                return {
+                    ...c,
+                    reply_count: replyMap[c._id.toString()] || 0,
+                    has_liked: likedByStrings.includes(userId),
+                    user_name: c.user_id?.username || "Utilizator șters",
+                    user_image: c.user_id?.icon || null
+                };
+            });
 
         return res.json({
             success: true,
