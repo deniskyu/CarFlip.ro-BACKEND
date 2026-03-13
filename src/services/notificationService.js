@@ -1,6 +1,7 @@
 import admin from '../firebase/firebase.js';
 import users from '../models/userModel.js';
 import Notifications from '../models/notificationModel.js';
+import Conversation from '../models/conversationModel.js';
 
 export const sendAndSaveNotification = async (recipientIds, payloadData, senderData = null) => {
     try {
@@ -22,7 +23,6 @@ export const sendAndSaveNotification = async (recipientIds, payloadData, senderD
             await Notifications.insertMany(dbNotifications, { ordered: false });
         }
 
-        // ─── Trimitem FCM separat per recipient (badge real per user) ─────────
         for (const recipientId of recipientIds) {
             const targetUser = await users.findById(recipientId).select('refreshTokens').lean();
             if (!targetUser?.refreshTokens?.length) continue;
@@ -34,16 +34,21 @@ export const sendAndSaveNotification = async (recipientIds, payloadData, senderD
             )];
             if (fcmTokens.length === 0) continue;
 
-            // ─── Badge real: numărul actual de necitite al acestui user ───────
-            const unreadCount = await Notifications.countDocuments({
+            const unreadNotifCount = await Notifications.countDocuments({
                 user_id: recipientId,
                 is_read: false
             });
-            // Pentru NEW_MESSAGE adăugăm 1 manual (nu e salvat în DB)
-            const badgeCount = payloadData.type === 'NEW_MESSAGE'
-                ? unreadCount + 1
-                : unreadCount;
-            // ─────────────────────────────────────────────────────────────────
+
+            const userConversations = await Conversation.find({ participants: recipientId }).select('unread_counts').lean();
+            let unreadChatTotal = 0;
+            for (const conv of userConversations) {
+                const countVal = conv.unread_counts instanceof Map
+                    ? conv.unread_counts.get(recipientId.toString())
+                    : conv.unread_counts?.[recipientId.toString()];
+                unreadChatTotal += (countVal || 0);
+            }
+
+            const badgeCount = unreadNotifCount + unreadChatTotal;
 
             const messagePayload = {
                 notification: {
@@ -81,7 +86,6 @@ export const sendAndSaveNotification = async (recipientIds, payloadData, senderD
                     const response = await admin.messaging().sendEachForMulticast(chunkPayload);
                     console.log(`📲 FCM [${payloadData.type}] → ${recipientId}: ${response.successCount} ok, ${response.failureCount} eșuate`);
 
-                    // ─── Cleanup tokeni invalizi ──────────────────────────────
                     const invalidTokens = [];
                     response.responses.forEach((r, idx) => {
                         if (!r.success) {
@@ -98,14 +102,12 @@ export const sendAndSaveNotification = async (recipientIds, payloadData, senderD
                         });
                         console.log(`🧹 Tokeni invalizi șterși pentru ${recipientId}: ${invalidTokens.length}`);
                     }
-                    // ─────────────────────────────────────────────────────────
 
                 } catch (fcmErr) {
                     console.error('❌ FCM sendEachForMulticast eroare:', fcmErr);
                 }
             }
         }
-        // ─────────────────────────────────────────────────────────────────────
 
     } catch (error) {
         console.error("Eroare in notificationService:", error);
