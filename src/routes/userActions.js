@@ -935,6 +935,195 @@ userActions.get('/api/sales/search', authUser, fetchLimiter, async (req, res) =>
     }
 });
 
+userActions.post('/api/sales/search-unseen', authUser, fetchLimiter, async (req, res) => {
+    try {
+        const {
+            brand_id, model_id,
+            min_price, max_price,
+            min_year, max_year,
+            min_km, max_km,
+            fuel_type, body_type, transmission,
+            pollution_standard, registration_status,
+            county, city, for_dismante,
+            steering_wheel, negotiable,
+            exclude_ids = [],
+            limit = 5,
+        } = req.body;
+
+        const safeNum = (val) => {
+            if (val === undefined || val === null || val === '') return null;
+            if (Array.isArray(val)) return null;
+            const cleanVal = String(val).trim();
+            const num = Number(cleanVal);
+            return isNaN(num) ? null : num;
+        };
+
+        const safeRegex = (val) => {
+            if (!val || val === 'null' || val === 'undefined') return null;
+            const cleaned = String(val).trim();
+            return new RegExp(cleaned, 'i');
+        };
+
+        const currentUserData = await users.findById(req.user.id).select('blocking blocked_by');
+
+        const excludedUserIds = [
+            ...(currentUserData.blocking || []),
+            ...(currentUserData.blocked_by || [])
+        ];
+
+        let query = {
+            is_active: true,
+            user_id: { $nin: excludedUserIds }
+        };
+
+        const sBrand = safeNum(brand_id);
+        const sModel = safeNum(model_id);
+        if (sBrand !== null) query['brand.id'] = sBrand;
+        if (sModel !== null) query['model.id'] = sModel;
+
+        if (fuel_type) query['engine.fuel_type'] = safeRegex(fuel_type);
+        if (body_type) query.body_type = safeRegex(body_type);
+        if (transmission) query.transmission = safeRegex(transmission);
+        if (pollution_standard) query.pollution_standard = safeRegex(pollution_standard);
+        if (registration_status) query.registration_status = String(registration_status).trim();
+        if (county) query['location.county'] = safeRegex(county);
+        if (city) query['location.city'] = safeRegex(city);
+
+        if (for_dismante !== undefined) {
+            query.for_dismante = (for_dismante === 'true' || for_dismante === true);
+        }
+
+        if (steering_wheel) {
+            query.steering_wheel = steering_wheel;
+        }
+
+        if (negotiable !== undefined) {
+            query.negotiable = (negotiable === 'true' || negotiable === true);
+        }
+
+        const minP = safeNum(min_price);
+        const maxP = safeNum(max_price);
+        if (minP !== null || maxP !== null) {
+            if (!query.price) query.price = {};
+            if (minP !== null) query.price.$gte = minP;
+            if (maxP !== null) query.price.$lte = maxP;
+        }
+
+        const minY = safeNum(min_year);
+        const maxY = safeNum(max_year);
+        if (minY !== null || maxY !== null) {
+            if (!query.production_year) query.production_year = {};
+            if (minY !== null) query.production_year.$gte = minY;
+            if (maxY !== null) query.production_year.$lte = maxY;
+        }
+
+        const minK = safeNum(min_km);
+        const maxK = safeNum(max_km);
+        if (minK !== null || maxK !== null) {
+            if (!query.mileage) query.mileage = {};
+            if (minK !== null) query.mileage.$gte = minK;
+            if (maxK !== null) query.mileage.$lte = maxK;
+        }
+
+        const excludeObjectIds = (Array.isArray(exclude_ids) ? exclude_ids : [])
+            .filter(id => mongoose.Types.ObjectId.isValid(id))
+            .map(id => new mongoose.Types.ObjectId(id));
+
+        if (excludeObjectIds.length > 0) {
+            query._id = { ...(query._id || {}), $nin: excludeObjectIds };
+        }
+
+        const safeLimit = Math.max(1, safeNum(limit) || 5);
+        const userObjectId = new mongoose.Types.ObjectId(req.user.id);
+        const pipeline = [];
+
+        pipeline.push({ $match: query });
+
+        pipeline.push({ $sort: { likes_count: -1, _id: -1 } });
+
+        pipeline.push({
+            $lookup: {
+                from: 'seenposts',
+                let: { saleId: '$_id' },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: {
+                                $and: [
+                                    { $eq: ['$sale_id', '$$saleId'] },
+                                    { $eq: ['$user_id', userObjectId] }
+                                ]
+                            }
+                        }
+                    },
+                    { $limit: 1 }
+                ],
+                as: 'seenCheck'
+            }
+        });
+
+        pipeline.push({ $match: { seenCheck: { $size: 0 } } });
+
+        pipeline.push({ $limit: safeLimit });
+
+        pipeline.push({
+            $addFields: {
+                hasLiked: {
+                    $cond: {
+                        if: { $isArray: '$liked_by' },
+                        then: {
+                            $anyElementTrue: {
+                                $map: {
+                                    input: '$liked_by',
+                                    as: 'like',
+                                    in: { $eq: ['$$like.user_id', userObjectId] }
+                                }
+                            }
+                        },
+                        else: false
+                    }
+                }
+            }
+        });
+
+        pipeline.push({ $project: { liked_by: 0, seenCheck: 0 } });
+
+        pipeline.push({
+            $lookup: {
+                from: 'users',
+                localField: 'user_id',
+                foreignField: '_id',
+                pipeline: [
+                    { $project: { username: 1, email: 1 } }
+                ],
+                as: '_user_populated'
+            }
+        });
+
+        pipeline.push({
+            $addFields: {
+                user_id: { $arrayElemAt: ['$_user_populated', 0] }
+            }
+        });
+
+        pipeline.push({ $project: { _user_populated: 0 } });
+
+        pipeline.push({ $match: { user_id: { $ne: null } } });
+
+        const results = await sales.aggregate(pipeline);
+
+        return res.json({
+            success: true,
+            data: results,
+            count: results.length
+        });
+
+    } catch (error) {
+        console.error("Search Unseen Error:", error);
+        return res.status(500).json({ success: false, message: "Eroare căutare." });
+    }
+});
+
 /*userActions.get('/api/sales/search', authUser, async (req, res) => {
     try {
         const {
