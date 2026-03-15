@@ -750,9 +750,9 @@ userActions.get('/api/sales/search', authUser, fetchLimiter, async (req, res) =>
             if (!val || val === 'null' || val === 'undefined') return null;
             const cleaned = String(val).trim();
             const escaped = cleaned.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            console.log('safeRegex input:', cleaned, '→ escaped:', escaped);
             return new RegExp(escaped, 'i');
         };
-        
         // ── BLOCKED USERS (neschimbat) ────────────────────────────────
 
         const currentUserData = await users.findById(req.user.id).select('blocking blocked_by');
@@ -963,6 +963,7 @@ userActions.post('/api/sales/search-unseen', authUser, fetchLimiter, async (req,
             if (!val || val === 'null' || val === 'undefined') return null;
             const cleaned = String(val).trim();
             const escaped = cleaned.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            console.log('safeRegex input:', cleaned, '→ escaped:', escaped);
             return new RegExp(escaped, 'i');
         };
 
