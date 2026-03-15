@@ -750,7 +750,6 @@ userActions.get('/api/sales/search', authUser, fetchLimiter, async (req, res) =>
             if (!val || val === 'null' || val === 'undefined') return null;
             const cleaned = String(val).trim();
             const escaped = cleaned.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            console.log('safeRegex input:', cleaned, '→ escaped:', escaped);
             return new RegExp(escaped, 'i');
         };
         // ── BLOCKED USERS (neschimbat) ────────────────────────────────
@@ -774,10 +773,10 @@ userActions.get('/api/sales/search', authUser, fetchLimiter, async (req, res) =>
         if (sBrand !== null) query['brand.id'] = sBrand;
         if (sModel !== null) query['model.id'] = sModel;
         
-        if (fuel_type) query['engine.fuel_type'] = safeRegex(fuel_type);
-        if (body_type) query.body_type = safeRegex(body_type);
-        if (transmission) query.transmission = safeRegex(transmission);
-        if (pollution_standard) query.pollution_standard = safeRegex(pollution_standard); 
+        if (fuel_type) query['engine.fuel_type'] = String(fuel_type).trim();
+        if (body_type) query.body_type = String(body_type).trim();
+        if (transmission) query.transmission = String(transmission).trim();
+        if (pollution_standard) query.pollution_standard = String(pollution_standard).trim();
         if (registration_status) query.registration_status = registration_status.trim();
         if (county) query['location.county'] = safeRegex(county);
         if (city) query['location.city'] = safeRegex(city);
@@ -963,7 +962,6 @@ userActions.post('/api/sales/search-unseen', authUser, fetchLimiter, async (req,
             if (!val || val === 'null' || val === 'undefined') return null;
             const cleaned = String(val).trim();
             const escaped = cleaned.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            console.log('safeRegex input:', cleaned, '→ escaped:', escaped);
             return new RegExp(escaped, 'i');
         };
 
@@ -984,10 +982,10 @@ userActions.post('/api/sales/search-unseen', authUser, fetchLimiter, async (req,
         if (sBrand !== null) query['brand.id'] = sBrand;
         if (sModel !== null) query['model.id'] = sModel;
 
-        if (fuel_type) query['engine.fuel_type'] = safeRegex(fuel_type);
-        if (body_type) query.body_type = safeRegex(body_type);
-        if (transmission) query.transmission = safeRegex(transmission);
-        if (pollution_standard) query.pollution_standard = safeRegex(pollution_standard);
+        if (fuel_type) query['engine.fuel_type'] = String(fuel_type).trim();
+        if (body_type) query.body_type = String(body_type).trim();
+        if (transmission) query.transmission = String(transmission).trim();
+        if (pollution_standard) query.pollution_standard = String(pollution_standard).trim();
         if (registration_status) query.registration_status = String(registration_status).trim();
         if (county) query['location.county'] = safeRegex(county);
         if (city) query['location.city'] = safeRegex(city);
