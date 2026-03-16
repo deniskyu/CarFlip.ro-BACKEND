@@ -559,7 +559,7 @@ userActions.get('/api/sales/feed', authUser, fetchLimiter, async (req, res) => {
         }
 
         // Detectare sfârșit posturi noi (exact ca înainte)
-        if (mode === 'new' && !cursor && foundSales.length === 0) {
+        if (mode === 'new' && foundSales.length === 0) {
             return res.json({
                 success: true,
                 data: [],
