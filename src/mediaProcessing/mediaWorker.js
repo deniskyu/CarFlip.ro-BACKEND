@@ -34,8 +34,8 @@ const processVideo = (inputPath, outputPath) => {
             .outputOptions([
                 '-threads 1',
                 '-vcodec libx264',
-                '-crf 28',
-                '-preset fast',
+                '-crf 29',
+                '-preset medium',
                 // FIX: un singur filtru care detectează orientarea și scalează corect
                 // Landscape → limitează lățimea la 1280, înălțimea auto
                 // Portrait  → limitează înălțimea la 720, lățimea auto
@@ -103,7 +103,7 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                             fit: 'inside',
                             withoutEnlargement: true
                         })
-                        .jpeg({ quality: 76, progressive: true })
+                        .jpeg({ quality: 75, progressive: true, mozjpeg: true, chromaSubsampling: '4:2:0' })
                         .toFile(processedFilePath);
                 }
 
@@ -237,7 +237,7 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                         fit: 'inside',
                         withoutEnlargement: true
                     })
-                    .jpeg({ quality: 75, progressive: true })
+                    .jpeg({ quality: 75, progressive: true, mozjpeg: true, chromaSubsampling: '4:2:0' })
                     .toFile(processedFilePath);
             }
             
