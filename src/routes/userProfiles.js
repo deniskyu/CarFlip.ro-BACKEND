@@ -251,6 +251,11 @@ userProfiles.post('/api/user/avatar', authUser, upload.single('avatar'), fetchLi
         // Salvează în DB
         currentUser.icon = newPublicUrl;
         await currentUser.save();
+        
+        await sales.updateMany(
+            { user_id: req.user.id },
+            { $set: { user_image: newPublicUrl } }
+        );
 
         res.json({ success: true, newUrl: newPublicUrl, message: 'Avatar schimbat.' });
     } catch (error) {
