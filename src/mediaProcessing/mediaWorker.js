@@ -98,12 +98,12 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                     await sharp(file.path)
                         .rotate()
                         .resize({ 
-                            width: 1920, 
-                            height: 1920, 
+                            width: 1440, 
+                            height: 1440, 
                             fit: 'inside',
                             withoutEnlargement: true
                         })
-                        .jpeg({ quality: 80, progressive: true })
+                        .jpeg({ quality: 76, progressive: true })
                         .toFile(processedFilePath);
                 }
 
@@ -232,12 +232,12 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                 await sharp(file.path)
                     .rotate()
                     .resize({ 
-                        width: 1920, 
-                        height: 1920, 
+                        width: 1440, 
+                        height: 1440, 
                         fit: 'inside',
                         withoutEnlargement: true
                     })
-                    .jpeg({ quality: 80, progressive: true })
+                    .jpeg({ quality: 75, progressive: true })
                     .toFile(processedFilePath);
             }
             
