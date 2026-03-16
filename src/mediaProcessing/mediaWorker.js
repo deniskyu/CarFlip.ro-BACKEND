@@ -40,8 +40,8 @@ const processVideo = (inputPath, outputPath) => {
                 // Landscape → limitează lățimea la 1280, înălțimea auto
                 // Portrait  → limitează înălțimea la 720, lățimea auto
                 // Al doilea scale forțează dimensiuni pare (cerință obligatorie x264)
-                '-vf', /*"scale='if(gte(iw,ih),min(1280,iw),-2)':'if(gte(iw,ih),-2,min(720,ih))',scale=trunc(iw/2)*2:trunc(ih/2)*2", */
-                       "scale='if(gte(iw,ih),min(1920,iw),-2)':'if(gte(iw,ih),-2,min(1920,ih))',scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                /*'-vf', "scale='if(gte(iw,ih),min(1920,iw),-2)':'if(gte(iw,ih),-2,min(1920,ih))',scale=trunc(iw/2)*2:trunc(ih/2)*2",*/
+                '-vf', "scale='if(gte(iw,ih),min(1280,iw),-2)':'if(gte(iw,ih),-2,min(720,ih))',scale=trunc(iw/2)*2:trunc(ih/2)*2",
                 '-acodec aac',
                 '-b:a 128k',
                 '-map_metadata -1',
