@@ -34,7 +34,7 @@ const processVideo = (inputPath, outputPath) => {
             .outputOptions([
                 '-threads 1',
                 '-vcodec libx264',
-                '-crf 26',
+                '-crf 28',
                 '-preset fast',
                 // FIX: un singur filtru care detectează orientarea și scalează corect
                 // Landscape → limitează lățimea la 1280, înălțimea auto

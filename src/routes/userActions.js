@@ -122,8 +122,8 @@ userActions.post('/api/sale/post/free',
 
                 if (isVideo) {
                     videoCount++;
-                    if (videoCount > 2) {
-                        return res.status(400).json({ success: false, message: "Maxim 2 videoclipuri permise." });
+                    if (videoCount > 1) {
+                        return res.status(400).json({ success: false, message: "Maxim 1 videoclip permis." });
                     }
                     if (file.size > MAX_VIDEO_SIZE) {
                         return res.status(400).json({ success: false, message: "Un fișier video depășește limita de 50MB." });
@@ -2019,8 +2019,8 @@ userActions.put('/api/sales/edit-with-media/:id',
 
                 if (isVideo) {
                     videoCount++;
-                    if (videoCount > 2) {
-                        return res.status(400).json({ success: false, message: "Maxim 2 videoclipuri permise." });
+                    if (videoCount > 1) {
+                        return res.status(400).json({ success: false, message: "Maxim 1 videoclipuri permis." });
                     }
                     if (file.size > MAX_VIDEO_SIZE) {
                         return res.status(400).json({ success: false, message: "Un fișier video depășește limita de 50MB." });
