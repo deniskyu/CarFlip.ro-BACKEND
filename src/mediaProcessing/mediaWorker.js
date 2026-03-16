@@ -103,7 +103,7 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                             fit: 'inside',
                             withoutEnlargement: true
                         })
-                        .jpeg({ quality: 75, progressive: true, mozjpeg: true, chromaSubsampling: '4:2:0' })
+                        .jpeg({ quality: 72, progressive: true, mozjpeg: true, chromaSubsampling: '4:2:0' })
                         .toFile(processedFilePath);
                 }
 
@@ -237,7 +237,7 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                         fit: 'inside',
                         withoutEnlargement: true
                     })
-                    .jpeg({ quality: 75, progressive: true, mozjpeg: true, chromaSubsampling: '4:2:0' })
+                    .jpeg({ quality: 72, progressive: true, mozjpeg: true, chromaSubsampling: '4:2:0' })
                     .toFile(processedFilePath);
             }
             
