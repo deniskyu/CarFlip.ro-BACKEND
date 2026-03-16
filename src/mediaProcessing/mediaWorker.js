@@ -118,6 +118,10 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                     ContentType: isVideo ? 'video/mp4' : 'image/jpeg'
                 }));
 
+                try {
+                    await fetch(`${process.env.R2_PUBLIC_DOMAIN}/${processedFileName}`, { method: 'HEAD' });
+                } catch (e) {}
+
                 const currentZoom = metadata[index]?.zoom_level || 1;
 
                 finalMediaUrls.push({
@@ -247,6 +251,10 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                 ContentLength: fileStats.size,
                 ContentType: isVideo ? 'video/mp4' : 'image/jpeg'
             }));
+
+            try {
+                await fetch(`${process.env.R2_PUBLIC_DOMAIN}/${processedFileName}`, { method: 'HEAD' });
+            } catch (e) {}
 
             const currentZoom = metadata[index]?.zoom_level || 1;
 
