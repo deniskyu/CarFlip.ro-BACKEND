@@ -2107,8 +2107,8 @@ userActions.put('/api/sales/edit-with-media/:id',
 userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
     const { saleId } = req.params;
     const appScheme = `carflip://post/${saleId}`;
-    const playStore = 'https://play.google.com/store/apps/details?id=com.carflip';
-    const appStore = 'https://apps.apple.com/app/carflip/id123456789'; // înlocuiește cu ID-ul real
+    const playStore = 'https://play.google.com/store/apps/details?id=com.carflip'
+    const appStore = 'https://apps.apple.com/app/carflip/id6760683057';
 
     res.send(`
         <!DOCTYPE html>
@@ -2156,7 +2156,7 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
     const { userId } = req.params;
     const appScheme = `carflip://profile/${userId}`;
     const playStore = 'https://play.google.com/store/apps/details?id=com.carflip';
-    const appStore = 'https://apps.apple.com/app/carflip/id123456789'; // înlocuiește cu ID-ul real
+    const appStore = 'https://apps.apple.com/app/carflip/id6760683057';
 
     res.send(`
         <!DOCTYPE html>
