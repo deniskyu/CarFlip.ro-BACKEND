@@ -75,8 +75,6 @@ export const initSocket = async (httpServer) => {
 
         io.adapter(createAdapter(pubClient, subClient));
         redisClient = pubClient;
-
-        console.log('✅ Socket.io Redis Adapter conectat');
     } catch (err) {
         console.error('❌ Eroare la conectarea Redis Adapter pentru Socket.io:', err.message);
     }
@@ -95,7 +93,6 @@ export const initSocket = async (httpServer) => {
 
     io.on('connection', async (socket) => {
         const userId = socket.userId;
-        console.log(`🟢 Socket conectat: ${userId} (socket: ${socket.id})`);
 
         await addOnlineUser(userId, socket.id);
         socket.join(`user_${userId}`);
@@ -269,7 +266,6 @@ export const initSocket = async (httpServer) => {
 
         // ─── EVENT: Deconectare ───────────────────────────────────────────────
         socket.on('disconnect', async (reason) => {
-            console.log(`🔴 Socket deconectat: ${userId} | Motiv: ${reason}`);
             await removeOnlineUser(userId, socket.id);
         });
 

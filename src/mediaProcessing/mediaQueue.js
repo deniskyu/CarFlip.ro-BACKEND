@@ -32,8 +32,6 @@ export const addMediaToQueue = async (saleId, files, metadata) => {
             files: serializedFiles, 
             metadata 
         });
-
-        console.log(`📥 Job adăugat cu succes în coadă! ID Anunț: ${saleId} | Job ID: ${job.id}`);
         return job;
     } catch (error) {
         console.error(`❌ Eroare gravă: Nu am putut pune anunțul ${saleId} în coadă.`, error);

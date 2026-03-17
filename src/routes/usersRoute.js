@@ -79,7 +79,6 @@ const rateLimitRedis = new Redis(process.env.REDIS_URL, {
 });
 
 await rateLimitRedis.ping();
-console.log('RateLimit Redis PING OK');
 
 export const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000 * 2,

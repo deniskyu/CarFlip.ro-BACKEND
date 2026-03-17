@@ -61,7 +61,6 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
 
     // ─── Ramura pentru UPDATE media (editare anunț existent) ─────────────────
     if (isMediaUpdate) {
-        console.log(`⚙️ Încep UPDATE media pentru anunțul: ${saleId} (Încercarea ${job.attemptsMade + 1}/${job.opts.attempts})`);
 
         const readyDirPath = path.join(process.cwd(), 'temp_uploads', 'ready');
         fs.ensureDirSync(readyDirPath);
@@ -139,8 +138,6 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                 { new: true }
             );
 
-            console.log(`✅ UPDATE media reușit pentru anunțul ${saleId}. ${finalMediaUrls.length} fișiere noi salvate.`);
-
             // ── Ștergem pozele vechi din R2 DOAR după ce swap-ul în DB a reușit ──
             for (const publicId of oldPublicIds) {
                 await s3.send(new DeleteObjectCommand({
@@ -148,8 +145,6 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                     Key: publicId
                 })).catch(err => console.warn(`⚠️ Nu am putut șterge ${publicId} din R2:`, err.message));
             }
-
-            console.log(`🗑️ ${oldPublicIds.length} fișiere vechi șterse din R2 pentru anunțul ${saleId}.`);
 
             // Ștergem fișierele originale de pe disk după succes complet
             for (const file of files) {
@@ -187,9 +182,6 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
         return; // Ieșim din worker după ramura de update
     }
     // ─────────────────────────────────────────────────────────────────────────
-
-    // ─── Ramura originală pentru POSTARE NOUĂ (NEATINSĂ) ─────────────────────
-    console.log(`⚙️ Încep procesarea pentru anunțul: ${saleId} (Încercarea ${job.attemptsMade + 1}/${job.opts.attempts})`);
 
     const readyDirPath = path.join(process.cwd(), 'temp_uploads', 'ready');
     fs.ensureDirSync(readyDirPath);

@@ -588,7 +588,6 @@ userActions.get('/api/sales/feed', authUser, fetchLimiter, async (req, res) => {
         const cursor = req.query.cursor; 
         const mode = req.query.mode || 'new'; 
 
-        console.log('be mue');
         const userId = req.user.id;
         if(!userId)
             return res.json({success: false, message: "Sesiune expirata"})
@@ -1267,7 +1266,6 @@ userActions.post('/api/sales/like', authUser, fetchLimiter, async (req, res) => 
 
         const sale = await sales.findById(sale_id);
         if (!sale) {
-            console.log('anunt negasit')
             return res.status(404).json({ success: false, message: "Anunț negăsit." });
         }
 
