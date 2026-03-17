@@ -2198,4 +2198,42 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
     `);
 });
 
+userActions.get('/info/stergere-cont', fetchLimiter, (req, res) => {
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Ștergere cont - CarFlip.ro</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    background-color: #800000;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 100vh;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                    padding: 20px;
+                    text-align: center;
+                }
+                .text { color: white; font-size: 18px; margin-top: 20px; opacity: 0.9; }
+                .subtext { color: rgba(255,255,255,0.8); font-size: 14px; margin-top: 10px; line-height: 1.5; }
+                a { color: #ffd700; text-decoration: none; }
+            </style>
+        </head>
+        <body>
+            <p class="text">Poți șterge contul CarFlip.ro direct din aplicație, în secțiunea <strong>Profil → Securitate → Ștergere cont</strong>.</p>
+            
+            <p class="subtext">Dacă întâmpini probleme cu ștergerea contului, trimite un email la: <a href="mailto:carflip.ro@outlook.com">carflip.ro@outlook.com</a></p>
+            
+            <p class="subtext">Toate datele asociate contului tău (anunțuri, mesaje, profil) vor fi șterse complet în termen de 30 de zile. Datele anonimizate pot fi păstrate temporar în backup-uri pentru securitate și conformitate legală.</p>
+        </body>
+        </html>
+    `);
+});
+
+
 export default userActions;
