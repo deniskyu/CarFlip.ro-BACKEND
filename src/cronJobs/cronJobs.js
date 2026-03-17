@@ -68,7 +68,7 @@ const startCronJobs = () => {
             const twoDaysAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
 
             // 1. Trecerea în Grace Period
-            await sales.updateMany(
+            const graceResult = await sales.updateMany(
                 { is_active: true, paid_until: { $lte: now } },
                 { $set: { is_active: false, status: 'grace_period' } }
             );
@@ -77,8 +77,7 @@ const startCronJobs = () => {
             if (graceResult.modifiedCount > 0) {
                 const graceSales = await sales.find({
                     status: 'grace_period',
-                    paid_until: { $lte: now },
-                    paid_until: { $gte: yesterday }
+                    paid_until: { $lte: now, $gte: yesterday },
                 }).select('user_id brand model _id').lean();
 
                 for (const sale of graceSales) {
