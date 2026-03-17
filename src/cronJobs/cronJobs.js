@@ -9,6 +9,7 @@ import path from 'path';
 import process from 'process';
 import Conversation from '../models/conversationModel.js';
 import Message from '../models/messageModel.js';
+import { sendAndSaveNotification } from '../services/notificationService.js';
 
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -71,6 +72,30 @@ const startCronJobs = () => {
                 { is_active: true, paid_until: { $lte: now } },
                 { $set: { is_active: false, status: 'grace_period' } }
             );
+
+                        // Notificăm proprietarii anunțurilor trecute în grace period
+            if (graceResult.modifiedCount > 0) {
+                const graceSales = await sales.find({
+                    status: 'grace_period',
+                    paid_until: { $lte: now },
+                    paid_until: { $gte: yesterday }
+                }).select('user_id brand model _id').lean();
+
+                for (const sale of graceSales) {
+                    await sendAndSaveNotification(
+                        [sale.user_id.toString()],
+                        {
+                            type: 'GRACE_PERIOD',
+                            title: 'Anunț expirat',
+                            body: `Anunțul "${sale.brand?.name} ${sale.model?.name}" expiră în 10 zile. Intră să-l reactivezi.`,
+                            saleId: sale._id.toString(),
+                            commentId: null
+                        },
+                        null
+                    );
+                }
+                console.log(`📢 ${graceSales.length} notificări grace period trimise.`);
+            }
 
             // 2. Identificare anunțuri de șters (Fatality)
             const salesToDelete = await sales.find({
