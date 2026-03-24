@@ -2235,11 +2235,11 @@ userActions.get('/info/stergere-cont', fetchLimiter, (req, res) => {
     `);
 });
 
-
 userActions.get('/api/sales/public-feed', fetchLimiter, async (req, res) => {
     try {
         const limit = parseInt(req.query.limit) || 10;
         const cursor = req.query.cursor;
+        const mode = req.query.mode || 'new';
 
         const pipeline = [];
 
@@ -2288,10 +2288,20 @@ userActions.get('/api/sales/public-feed', fetchLimiter, async (req, res) => {
             nextCursor = foundSales[foundSales.length - 1]._id;
         }
 
+        if (mode === 'new' && foundSales.length === 0) {
+            return res.json({
+                success: true,
+                data: [],
+                nextCursor: null,
+                endOfNewPosts: true
+            });
+        }
+
         return res.json({
             success: true,
             data: foundSales,
-            nextCursor
+            nextCursor,
+            endOfNewPosts: false
         });
 
     } catch (error) {
