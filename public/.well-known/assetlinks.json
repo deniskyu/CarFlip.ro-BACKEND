@@ -1,0 +1,10 @@
+[
+    {
+        "relation": ["delegate_permission/common.handle_all_urls"],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "com.mobilefrontendframe",
+            "sha256_cert_fingerprints": ["B1:D1:E8:E3:C0:FF:F9:AD:9F:70:24:2D:7D:CA:71:AB:F0:2C:42:D6:53:16:8D:88:AF:25:70:C0:2F:CD:22:49"]
+        }
+    }
+]

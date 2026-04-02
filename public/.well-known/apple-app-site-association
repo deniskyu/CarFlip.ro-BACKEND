@@ -1,0 +1,11 @@
+{
+    "applinks": {
+        "apps": [],
+        "details": [
+            {
+                "appID": "4F3M46392M.ro.carflip.app",
+                "paths": ["/post/*", "/profile/*"]
+            }
+        ]
+    }
+}

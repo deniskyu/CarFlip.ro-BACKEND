@@ -9,6 +9,11 @@ import { createServer } from 'http';
 import { initSocket } from './src/socket/socketManager.js';
 import helmet from 'helmet';
 
+
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 dotenv.config();
 
 const app = express();
@@ -20,6 +25,8 @@ app.set('trust proxy', 2);
 app.use(cors());
 
 //app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhookRoute);
+
+app.use('/.well-known', express.static(path.join(__dirname, 'public/.well-known')));
 
 app.use(express.json());
 
