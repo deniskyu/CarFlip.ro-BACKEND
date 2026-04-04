@@ -2310,4 +2310,232 @@ userActions.get('/api/sales/public-feed', fetchLimiter, async (req, res) => {
     }
 });
 
+
+userActions.get('/api/sales/search-list', authUser, fetchLimiter, async (req, res) => {
+    try {
+        const {
+            brand_id, model_id,
+            min_price, max_price,
+            min_year, max_year,
+            min_km, max_km,
+            fuel_type, body_type, transmission,
+            pollution_standard, registration_status,
+            county, city, for_dismante,
+            exclude_seen,
+            steering_wheel, negotiable,
+            cursor,
+            limit = 20,
+        } = req.query;
+
+        const safeNum = (val) => {
+            if (val === undefined || val === null || val === '') return null;
+            if (Array.isArray(val)) return null;
+            const cleanVal = String(val).trim();
+            const num = Number(cleanVal);
+            return isNaN(num) ? null : num;
+        };
+
+        const safeRegex = (val) => {
+            if (!val || val === 'null' || val === 'undefined') return null;
+            const cleaned = String(val).trim();
+            const escaped = cleaned.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return new RegExp(escaped, 'i');
+        };
+
+        const currentUserData = await users.findById(req.user.id).select('blocking blocked_by');
+
+        const excludedUserIds = [
+            ...(currentUserData.blocking || []),
+            ...(currentUserData.blocked_by || [])
+        ];
+
+        let query = {
+            is_active: true,
+            user_id: { $nin: excludedUserIds }
+        };
+
+        const sBrand = safeNum(brand_id);
+        const sModel = safeNum(model_id);
+        if (sBrand !== null) query['brand.id'] = sBrand;
+        if (sModel !== null) query['model.id'] = sModel;
+
+        if (fuel_type) query['engine.fuel_type'] = String(fuel_type).trim();
+        if (body_type) query.body_type = String(body_type).trim();
+        if (transmission) query.transmission = String(transmission).trim();
+        if (pollution_standard) query.pollution_standard = String(pollution_standard).trim();
+        if (registration_status) query.registration_status = registration_status.trim();
+        if (county) query['location.county'] = safeRegex(county);
+        if (city) query['location.city'] = safeRegex(city);
+
+        if (for_dismante !== undefined) {
+            query.for_dismante = (for_dismante === 'true' || for_dismante === true);
+        }
+
+        if (steering_wheel) {
+            query.steering_wheel = steering_wheel;
+        }
+
+        if (negotiable !== undefined) {
+            query.negotiable = (negotiable === 'true' || negotiable === true);
+        }
+
+        const minP = safeNum(min_price);
+        const maxP = safeNum(max_price);
+        if (minP !== null || maxP !== null) {
+            if (!query.price) query.price = {};
+            if (minP !== null) query.price.$gte = minP;
+            if (maxP !== null) query.price.$lte = maxP;
+        }
+
+        const minY = safeNum(min_year);
+        const maxY = safeNum(max_year);
+        if (minY !== null || maxY !== null) {
+            if (!query.production_year) query.production_year = {};
+            if (minY !== null) query.production_year.$gte = minY;
+            if (maxY !== null) query.production_year.$lte = maxY;
+        }
+
+        const minK = safeNum(min_km);
+        const maxK = safeNum(max_km);
+        if (minK !== null || maxK !== null) {
+            if (!query.mileage) query.mileage = {};
+            if (minK !== null) query.mileage.$gte = minK;
+            if (maxK !== null) query.mileage.$lte = maxK;
+        }
+
+        const safeLimit = Math.max(1, Math.min(50, safeNum(limit) || 20));
+        const userObjectId = new mongoose.Types.ObjectId(req.user.id);
+
+        // ── CURSOR DECODE ─────────────────────────────────────────────
+        // Cursor encodes the last item's likes_count + _id for stable
+        // pagination on compound sort { likes_count: -1, _id: -1 }
+
+        if (cursor) {
+            try {
+                const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+                const cursorLikes = Number(decoded.l);
+                const cursorId = new mongoose.Types.ObjectId(decoded.id);
+
+                query.$or = [
+                    { likes_count: { $lt: cursorLikes } },
+                    { likes_count: cursorLikes, _id: { $lt: cursorId } }
+                ];
+            } catch (e) {
+                return res.status(400).json({ success: false, message: "Cursor invalid." });
+            }
+        }
+
+        // ── AGGREGATION PIPELINE ──────────────────────────────────────
+
+        const pipeline = [];
+
+        pipeline.push({ $match: query });
+
+        pipeline.push({ $sort: { likes_count: -1, _id: -1 } });
+
+        if (exclude_seen === 'true') {
+            pipeline.push({
+                $lookup: {
+                    from: 'seenposts',
+                    let: { saleId: '$_id' },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ['$sale_id', '$$saleId'] },
+                                        { $eq: ['$user_id', userObjectId] }
+                                    ]
+                                }
+                            }
+                        },
+                        { $limit: 1 }
+                    ],
+                    as: 'seenCheck'
+                }
+            });
+            pipeline.push({ $match: { seenCheck: { $size: 0 } } });
+        }
+
+        pipeline.push({ $limit: safeLimit + 1 });
+
+        pipeline.push({
+            $addFields: {
+                hasLiked: {
+                    $cond: {
+                        if: { $isArray: '$liked_by' },
+                        then: {
+                            $anyElementTrue: {
+                                $map: {
+                                    input: '$liked_by',
+                                    as: 'like',
+                                    in: { $eq: ['$$like.user_id', userObjectId] }
+                                }
+                            }
+                        },
+                        else: false
+                    }
+                }
+            }
+        });
+
+        const projectOut = { liked_by: 0 };
+        if (exclude_seen === 'true') {
+            projectOut.seenCheck = 0;
+        }
+        pipeline.push({ $project: projectOut });
+
+        pipeline.push({
+            $lookup: {
+                from: 'users',
+                localField: 'user_id',
+                foreignField: '_id',
+                pipeline: [
+                    { $project: { username: 1, email: 1 } }
+                ],
+                as: '_user_populated'
+            }
+        });
+
+        pipeline.push({
+            $addFields: {
+                user_id: { $arrayElemAt: ['$_user_populated', 0] }
+            }
+        });
+
+        pipeline.push({ $project: { _user_populated: 0 } });
+
+        pipeline.push({ $match: { user_id: { $ne: null } } });
+
+        // ── EXECUTE ───────────────────────────────────────────────────
+
+        const results = await sales.aggregate(pipeline);
+
+        // ── BUILD NEXT CURSOR ─────────────────────────────────────────
+
+        let nextCursor = null;
+        let hasMore = false;
+
+        if (results.length > safeLimit) {
+            hasMore = true;
+            results.pop();
+            const lastItem = results[results.length - 1];
+            const cursorPayload = { l: lastItem.likes_count || 0, id: lastItem._id.toString() };
+            nextCursor = Buffer.from(JSON.stringify(cursorPayload)).toString('base64url');
+        }
+
+        return res.json({
+            success: true,
+            data: results,
+            nextCursor,
+            hasMore,
+            count: results.length
+        });
+
+    } catch (error) {
+        console.error("Search List Error:", error);
+        return res.status(500).json({ success: false, message: "Eroare căutare." });
+    }
+});
+
 export default userActions;
