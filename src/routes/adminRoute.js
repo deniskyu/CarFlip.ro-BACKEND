@@ -4,14 +4,14 @@ import bcrypt from "bcrypt";
 import { rateLimit } from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
 import Redis from "ioredis";
-import admins from "../models/adminModel.js";
+import admins from "../models/adminModel.js"
 import users from "../models/userModel.js";
 import Reports from "../models/reportModel.js";
 import sales from "../models/salesModel.js";
 import Comments from "../models/commentModel.js";
 import Message from "../models/messageModel.js";
-import brands from "../models/brandModel.js";
-import automobiles from "../models/automobileModel.js";
+import brands from "../models/brandsModel.js";
+import automobiles from "../models/automobilesModel.js";
 import dotenv from "dotenv";
 dotenv.config();
 
