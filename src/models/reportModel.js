@@ -21,6 +21,10 @@ const reportSchema = new mongoose.Schema({
         required: true,
         maxLength: 500
     },
+    status: {
+        type: String,
+        default: "pending",
+    }
 }, { 
     timestamps: true 
 });

@@ -8,6 +8,7 @@ import startCronJobs from './src/cronJobs/cronJobs.js';
 import { createServer } from 'http';
 import { initSocket } from './src/socket/socketManager.js';
 import helmet from 'helmet';
+import adminRoute from './src/routes/adminRoute.js';
 
 
 import path from 'path';
@@ -22,7 +23,6 @@ const httpServer = createServer(app)
 app.use(helmet());
 app.set('trust proxy', 2);
 
-app.use(cors());
 
 //app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhookRoute);
 
@@ -37,6 +37,17 @@ app.get('/api/app/version', (req, res) => {
         version, success: true 
     });
 });
+
+const adminCors = cors({
+    origin: process.env.ADMIN_PANEL_URL,
+    credentials: true,
+});
+app.use('/api/admin', adminCors);  // ← adaugă asta
+app.use((req, res, next) => {
+    if (req.path.startsWith('/api/admin')) return next();
+    cors()(req, res, next);
+});
+app.use(adminRoute);
 
 app.use(indexRoute);
 
