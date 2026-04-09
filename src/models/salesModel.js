@@ -8,6 +8,8 @@ const saleSchema = new mongoose.Schema({
     },
     user_name: { type: String },
     user_image: { type: String },
+    
+    title: { type: String, required: true, maxlength: 25 },
 
     brand: {
         id: { type: Number, required: true },

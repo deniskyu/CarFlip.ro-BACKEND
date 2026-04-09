@@ -82,7 +82,7 @@ userActions.post('/api/sale/post/free',
                 registration_status, exchange_accepted, for_dismante,
                 phone_number, description,
                 vin, steering_wheel, negotiable, allow_comments,
-                media_metadata
+                media_metadata, title
             } = req.body;
 
             // ── Parsare metadata zoom ─────────────────────────────────
@@ -102,7 +102,7 @@ userActions.post('/api/sale/post/free',
                 !engine_capacity || !engine_fuel || !price ||
                 !mileage || !production_year || !body_type || !color ||
                 !transmission || !drivetrain || !pollution_standard ||
-                !county || !city || !registration_status || !phone_number || !description
+                !county || !city || !registration_status || !phone_number || !description || !title
             ) {
                 return res.status(400).json({ success: false, message: "Te rugăm să completezi toate câmpurile esențiale." });
             }
@@ -149,6 +149,7 @@ userActions.post('/api/sale/post/free',
                 user_id: req.user.id,
                 user_name: currentUser.username,
                 user_image: currentUser.icon,
+                title: sanitize(title),
                 brand: { id: Number(brand_id), name: sanitize(brand_name) },
                 model: { id: Number(model_id), name: sanitize(model_name) },
                 engine: { capacity: sanitize(engine_capacity), fuel_type: sanitize(engine_fuel) },
@@ -1883,7 +1884,8 @@ userActions.put('/api/sales/edit/:id', authUser, fetchLimiter, async (req, res) 
             for_dismante,
             allow_comments,
             engine_capacity, // 🔥 AICI E NOU
-            media // <-- Îl vom procesa special, nu îl băgăm direct!
+            media, // <-- Îl vom procesa special, nu îl băgăm direct!
+            title
         } = req.body;
 
 
@@ -1922,6 +1924,7 @@ userActions.put('/api/sales/edit/:id', authUser, fetchLimiter, async (req, res) 
             const parsedPrice = Number(String(price).replace(/[^0-9]/g, ''));
             sale.price = !isNaN(parsedPrice) ? parsedPrice : sale.price;
         }
+        if (title !== undefined) sale.title = sanitize(title);
         if (mileage !== undefined) {
             const parsedMileage = Number(String(mileage).replace(/[^0-9]/g, ''));
             sale.mileage = !isNaN(parsedMileage) ? parsedMileage : sale.mileage;
@@ -1989,7 +1992,8 @@ userActions.put('/api/sales/edit-with-media/:id',
                 for_dismante,
                 allow_comments,
                 old_public_ids,    // JSON string cu public_id-urile pozelor vechi
-                media_metadata     // JSON string cu zoom-urile fișierelor noi
+                media_metadata,     // JSON string cu zoom-urile fișierelor noi
+                title
             } = req.body;
 
             // 2. Găsim anunțul și validăm proprietarul
@@ -2057,6 +2061,7 @@ userActions.put('/api/sales/edit-with-media/:id',
                 const parsedPrice = Number(String(price).replace(/[^0-9]/g, ''));
                 sale.price = !isNaN(parsedPrice) ? parsedPrice : sale.price;
             }
+            if (title !== undefined) sale.title = sanitize(title);
             if (mileage !== undefined) {
                 const parsedMileage = Number(String(mileage).replace(/[^0-9]/g, ''));
                 sale.mileage = !isNaN(parsedMileage) ? parsedMileage : sale.mileage;
