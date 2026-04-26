@@ -2137,18 +2137,23 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
         </head>
         <body>
             <p class="text">Se deschide CarFlip...</p>
-            <p class="subtext">Dacă nu se deschide automat, descarcă aplicația</p>
+            <p class="subtext">Dacă nu se deschide automat, apasă butonul</p>
+            <button onclick="openApp()" style="margin-top:20px; background:white; color:#800000; border:none; padding:14px 36px; border-radius:25px; font-size:16px; font-weight:bold; cursor:pointer;">
+                Deschide anunțul
+            </button>
             <script>
                 const ua = navigator.userAgent.toLowerCase();
                 const isIOS = /iphone|ipad|ipod/.test(ua);
                 const isAndroid = /android/.test(ua);
                 const storeUrl = isIOS ? '${appStore}' : '${playStore}';
 
-                window.location = '${appScheme}';
+                function openApp() {
+                    window.location = '${appScheme}';
+                    setTimeout(() => { window.location = storeUrl; }, 2500);
+                }
 
-                setTimeout(() => {
-                    window.location = storeUrl;
-                }, 2500);
+                // Pe Android mergem automat, pe iOS Safari necesită gesture
+                if (isAndroid) openApp();
             </script>
         </body>
         </html>
@@ -2185,18 +2190,22 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
         </head>
         <body>
             <p class="text">Se deschide CarFlip...</p>
-            <p class="subtext">Dacă nu se deschide automat, descarcă aplicația</p>
+            <p class="subtext">Dacă nu se deschide automat, apasă butonul</p>
+            <button onclick="openApp()" style="margin-top:20px; background:white; color:#800000; border:none; padding:14px 36px; border-radius:25px; font-size:16px; font-weight:bold; cursor:pointer;">
+                Deschide profilul
+            </button>
             <script>
                 const ua = navigator.userAgent.toLowerCase();
                 const isIOS = /iphone|ipad|ipod/.test(ua);
                 const isAndroid = /android/.test(ua);
                 const storeUrl = isIOS ? '${appStore}' : '${playStore}';
 
-                window.location = '${appScheme}';
+                function openApp() {
+                    window.location = '${appScheme}';
+                    setTimeout(() => { window.location = storeUrl; }, 2500);
+                }
 
-                setTimeout(() => {
-                    window.location = storeUrl;
-                }, 2500);
+                if (isAndroid) openApp();
             </script>
         </body>
         </html>

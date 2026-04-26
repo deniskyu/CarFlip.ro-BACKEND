@@ -26,7 +26,7 @@ app.set('trust proxy', 2);
 
 //app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeWebhookRoute);
 
-app.use('/.well-known', express.static(path.join(__dirname, 'public/.well-known')));
+app.use('/.well-known', express.static(path.join(process.cwd(), 'public/.well-known')));
 
 app.use(express.json());
 

@@ -4,7 +4,7 @@
         "target": {
             "namespace": "android_app",
             "package_name": "com.mobilefrontendframe",
-            "sha256_cert_fingerprints": ["B1:D1:E8:E3:C0:FF:F9:AD:9F:70:24:2D:7D:CA:71:AB:F0:2C:42:D6:53:16:8D:88:AF:25:70:C0:2F:CD:22:49"]
+            "sha256_cert_fingerprints": ["E7:52:FA:B2:BB:91:AE:06:67:FE:52:21:7C:A7:C6:7C:1C:7F:35:81:29:94:BE:49:4D:72:37:42:4E:41:F8:CB"]
         }
     }
 ]
