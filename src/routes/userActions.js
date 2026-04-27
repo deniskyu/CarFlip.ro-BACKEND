@@ -2254,7 +2254,6 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
     const appSchemeIOS = `carflip://post/${saleId}`;
     const appSchemeAndroid = `intent://post/${saleId}#Intent;scheme=carflip;package=com.mobilefrontendframe;end`;
     const fullUrl = `https://car-flip.com/post/${saleId}`;
-    const openInBrowser = `intent://${fullUrl.replace('https://', '')}#Intent;scheme=https;action=android.intent.action.VIEW;end`;
     const playStore = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe';
     const appStore = 'https://apps.apple.com/ro/app/id6760683057';
 
@@ -2322,6 +2321,27 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
                     transition: transform 0.15s;
                 }
                 .btn-open:active { transform: scale(0.96); }
+                .btn-copy {
+                    display: none;
+                    background: rgba(255, 255, 255, 0.15);
+                    border: 1px solid rgba(255, 255, 255, 0.25);
+                    color: white;
+                    padding: 11px 30px;
+                    border-radius: 22px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    margin-top: 12px;
+                    transition: background 0.2s;
+                }
+                .btn-copy:active { background: rgba(255, 255, 255, 0.25); }
+                .webview-hint {
+                    display: none;
+                    color: rgba(255, 255, 255, 0.45);
+                    font-size: 11px;
+                    margin-top: 16px;
+                    line-height: 1.5;
+                }
                 .store-section {
                     margin-top: 36px;
                     text-align: center;
@@ -2345,12 +2365,20 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
                     transition: background 0.2s;
                 }
                 .btn-store:active { background: rgba(255, 255, 255, 0.18); }
-                .webview-notice {
-                    color: rgba(255, 255, 255, 0.45);
-                    font-size: 11px;
-                    margin-top: 14px;
-                    display: none;
+                .copied-toast {
+                    position: fixed;
+                    bottom: 30px;
+                    background: rgba(0, 0, 0, 0.85);
+                    color: white;
+                    padding: 12px 24px;
+                    border-radius: 25px;
+                    font-size: 14px;
+                    font-weight: 600;
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                    pointer-events: none;
                 }
+                .copied-toast.show { opacity: 1; }
             </style>
         </head>
         <body>
@@ -2361,13 +2389,16 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
                 <div class="title" id="cardTitle">Se deschide CarFlip...</div>
                 <div class="subtitle" id="cardSubtitle">Dacă nu se deschide automat, apasă butonul de mai jos</div>
                 <button class="btn-open" id="mainBtn" onclick="openApp()">Deschide anunțul</button>
-                <div class="webview-notice" id="webviewNotice">Linkurile nu pot fi deschise din această aplicație</div>
+                <button class="btn-copy" id="copyBtn" onclick="copyLink()">📋 Copiază linkul</button>
+                <div class="webview-hint" id="webviewHint">sau apasă ⋮ din colțul ecranului → „Deschide în browser"</div>
             </div>
 
             <div class="store-section">
                 <div class="store-text">Nu ai aplicația instalată?</div>
                 <a class="btn-store" id="storeBtn" href="#">Descarcă din magazin</a>
             </div>
+
+            <div class="copied-toast" id="toast">Link copiat! Lipește-l în browser ✓</div>
 
             <script>
                 var ua = navigator.userAgent || '';
@@ -2382,18 +2413,36 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
 
                 if (isAndroid && isWebView) {
                     document.getElementById('cardTitle').textContent = 'Deschide în browser';
-                    document.getElementById('cardSubtitle').textContent = 'Pentru a vedea anunțul, deschide linkul în browserul telefonului';
-                    document.getElementById('mainBtn').textContent = 'Deschide în browser';
-                    document.getElementById('webviewNotice').style.display = 'block';
+                    document.getElementById('cardSubtitle').textContent = 'Acest link trebuie deschis în browserul telefonului';
+                    document.getElementById('mainBtn').textContent = 'Copiază și deschide';
+                    document.getElementById('mainBtn').onclick = function() { copyLink(); };
+                    document.getElementById('copyBtn').style.display = 'none';
+                    document.getElementById('webviewHint').style.display = 'block';
+                }
 
-                    document.getElementById('mainBtn').onclick = function() {
-                        window.location.href = '${openInBrowser}';
-                    };
+                function copyLink() {
+                    var url = '${fullUrl}';
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(url).then(showToast).catch(fallbackCopy);
+                    } else {
+                        fallbackCopy();
+                    }
+                }
 
-                    document.getElementById('storeBtn').onclick = function(e) {
-                        e.preventDefault();
-                        window.location.href = 'intent://' + storeUrl.replace('https://', '') + '#Intent;scheme=https;action=android.intent.action.VIEW;end';
-                    };
+                function fallbackCopy() {
+                    var input = document.createElement('input');
+                    input.value = '${fullUrl}';
+                    document.body.appendChild(input);
+                    input.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(input);
+                    showToast();
+                }
+
+                function showToast() {
+                    var toast = document.getElementById('toast');
+                    toast.classList.add('show');
+                    setTimeout(function() { toast.classList.remove('show'); }, 2500);
                 }
 
                 function openApp() {
@@ -2421,7 +2470,6 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
     const appSchemeIOS = `carflip://profile/${userId}`;
     const appSchemeAndroid = `intent://profile/${userId}#Intent;scheme=carflip;package=com.mobilefrontendframe;end`;
     const fullUrl = `https://car-flip.com/profile/${userId}`;
-    const openInBrowser = `intent://${fullUrl.replace('https://', '')}#Intent;scheme=https;action=android.intent.action.VIEW;end`;
     const playStore = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe';
     const appStore = 'https://apps.apple.com/ro/app/id6760683057';
 
@@ -2489,6 +2537,27 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
                     transition: transform 0.15s;
                 }
                 .btn-open:active { transform: scale(0.96); }
+                .btn-copy {
+                    display: none;
+                    background: rgba(255, 255, 255, 0.15);
+                    border: 1px solid rgba(255, 255, 255, 0.25);
+                    color: white;
+                    padding: 11px 30px;
+                    border-radius: 22px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    margin-top: 12px;
+                    transition: background 0.2s;
+                }
+                .btn-copy:active { background: rgba(255, 255, 255, 0.25); }
+                .webview-hint {
+                    display: none;
+                    color: rgba(255, 255, 255, 0.45);
+                    font-size: 11px;
+                    margin-top: 16px;
+                    line-height: 1.5;
+                }
                 .store-section {
                     margin-top: 36px;
                     text-align: center;
@@ -2512,12 +2581,20 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
                     transition: background 0.2s;
                 }
                 .btn-store:active { background: rgba(255, 255, 255, 0.18); }
-                .webview-notice {
-                    color: rgba(255, 255, 255, 0.45);
-                    font-size: 11px;
-                    margin-top: 14px;
-                    display: none;
+                .copied-toast {
+                    position: fixed;
+                    bottom: 30px;
+                    background: rgba(0, 0, 0, 0.85);
+                    color: white;
+                    padding: 12px 24px;
+                    border-radius: 25px;
+                    font-size: 14px;
+                    font-weight: 600;
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                    pointer-events: none;
                 }
+                .copied-toast.show { opacity: 1; }
             </style>
         </head>
         <body>
@@ -2528,13 +2605,16 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
                 <div class="title" id="cardTitle">Se deschide CarFlip...</div>
                 <div class="subtitle" id="cardSubtitle">Dacă nu se deschide automat, apasă butonul de mai jos</div>
                 <button class="btn-open" id="mainBtn" onclick="openApp()">Deschide profilul</button>
-                <div class="webview-notice" id="webviewNotice">Linkurile nu pot fi deschise din această aplicație</div>
+                <button class="btn-copy" id="copyBtn" onclick="copyLink()">📋 Copiază linkul</button>
+                <div class="webview-hint" id="webviewHint">sau apasă ⋮ din colțul ecranului → „Deschide în browser"</div>
             </div>
 
             <div class="store-section">
                 <div class="store-text">Nu ai aplicația instalată?</div>
                 <a class="btn-store" id="storeBtn" href="#">Descarcă din magazin</a>
             </div>
+
+            <div class="copied-toast" id="toast">Link copiat! Lipește-l în browser ✓</div>
 
             <script>
                 var ua = navigator.userAgent || '';
@@ -2549,18 +2629,36 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
 
                 if (isAndroid && isWebView) {
                     document.getElementById('cardTitle').textContent = 'Deschide în browser';
-                    document.getElementById('cardSubtitle').textContent = 'Pentru a vedea profilul, deschide linkul în browserul telefonului';
-                    document.getElementById('mainBtn').textContent = 'Deschide în browser';
-                    document.getElementById('webviewNotice').style.display = 'block';
+                    document.getElementById('cardSubtitle').textContent = 'Acest link trebuie deschis în browserul telefonului';
+                    document.getElementById('mainBtn').textContent = 'Copiază și deschide';
+                    document.getElementById('mainBtn').onclick = function() { copyLink(); };
+                    document.getElementById('copyBtn').style.display = 'none';
+                    document.getElementById('webviewHint').style.display = 'block';
+                }
 
-                    document.getElementById('mainBtn').onclick = function() {
-                        window.location.href = '${openInBrowser}';
-                    };
+                function copyLink() {
+                    var url = '${fullUrl}';
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(url).then(showToast).catch(fallbackCopy);
+                    } else {
+                        fallbackCopy();
+                    }
+                }
 
-                    document.getElementById('storeBtn').onclick = function(e) {
-                        e.preventDefault();
-                        window.location.href = 'intent://' + storeUrl.replace('https://', '') + '#Intent;scheme=https;action=android.intent.action.VIEW;end';
-                    };
+                function fallbackCopy() {
+                    var input = document.createElement('input');
+                    input.value = '${fullUrl}';
+                    document.body.appendChild(input);
+                    input.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(input);
+                    showToast();
+                }
+
+                function showToast() {
+                    var toast = document.getElementById('toast');
+                    toast.classList.add('show');
+                    setTimeout(function() { toast.classList.remove('show'); }, 2500);
                 }
 
                 function openApp() {
