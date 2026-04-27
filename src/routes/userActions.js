@@ -2255,7 +2255,7 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
     const appSchemeAndroid = `intent://post/${saleId}#Intent;scheme=carflip;package=com.mobilefrontendframe;end`;
     const playStore = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe';
     const appStore = 'https://apps.apple.com/ro/app/id6760683057';
- 
+
     res.send(`
         <!DOCTYPE html>
         <html>
@@ -2277,122 +2277,123 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
                 }
                 .logo-text {
                     color: white;
-                    font-size: 28px;
+                    font-size: 26px;
                     font-weight: 900;
-                    letter-spacing: 1px;
-                    margin-bottom: 30px;
+                    letter-spacing: 0.5px;
+                    margin-bottom: 28px;
                 }
                 .logo-accent { color: #ffcccc; }
                 .card {
-                    background: rgba(255, 255, 255, 0.1);
-                    border: 1px solid rgba(255, 255, 255, 0.15);
-                    border-radius: 20px;
-                    padding: 35px 25px;
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(255, 255, 255, 0.12);
+                    border-radius: 18px;
+                    padding: 30px 24px;
                     text-align: center;
-                    max-width: 340px;
+                    max-width: 320px;
                     width: 100%;
-                    backdrop-filter: blur(10px);
                 }
-                .icon { font-size: 44px; margin-bottom: 15px; }
+                .icon { font-size: 30px; margin-bottom: 12px; }
                 .title {
                     color: white;
-                    font-size: 20px;
+                    font-size: 18px;
                     font-weight: 700;
-                    margin-bottom: 8px;
+                    margin-bottom: 6px;
                 }
                 .subtitle {
-                    color: rgba(255, 255, 255, 0.65);
-                    font-size: 14px;
+                    color: rgba(255, 255, 255, 0.55);
+                    font-size: 13px;
                     line-height: 1.5;
-                    margin-bottom: 25px;
+                    margin-bottom: 22px;
                 }
                 .btn-open {
                     display: inline-block;
                     background: white;
                     color: #800000;
                     border: none;
-                    padding: 14px 40px;
-                    border-radius: 30px;
-                    font-size: 16px;
+                    padding: 13px 36px;
+                    border-radius: 28px;
+                    font-size: 15px;
                     font-weight: bold;
                     cursor: pointer;
                     width: 100%;
-                    max-width: 260px;
+                    max-width: 240px;
                     transition: transform 0.15s;
                 }
                 .btn-open:active { transform: scale(0.96); }
                 .store-section {
-                    margin-top: 40px;
+                    margin-top: 36px;
                     text-align: center;
                 }
                 .store-text {
-                    color: rgba(255, 255, 255, 0.5);
-                    font-size: 13px;
-                    margin-bottom: 12px;
+                    color: rgba(255, 255, 255, 0.4);
+                    font-size: 12px;
+                    margin-bottom: 10px;
                 }
                 .btn-store {
                     display: inline-block;
-                    background: rgba(255, 255, 255, 0.12);
-                    border: 1px solid rgba(255, 255, 255, 0.25);
+                    background: rgba(255, 255, 255, 0.1);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
                     color: white;
-                    padding: 12px 30px;
-                    border-radius: 25px;
-                    font-size: 14px;
+                    padding: 11px 26px;
+                    border-radius: 22px;
+                    font-size: 13px;
                     font-weight: 600;
                     cursor: pointer;
                     text-decoration: none;
                     transition: background 0.2s;
                 }
-                .btn-store:active { background: rgba(255, 255, 255, 0.2); }
+                .btn-store:active { background: rgba(255, 255, 255, 0.18); }
             </style>
         </head>
         <body>
             <div class="logo-text">Car<span class="logo-accent">Flip</span>.ro</div>
- 
+
             <div class="card">
                 <div class="icon">🚗</div>
                 <div class="title">Se deschide CarFlip...</div>
                 <div class="subtitle">Dacă nu se deschide automat, apasă butonul de mai jos</div>
                 <button class="btn-open" onclick="openApp()">Deschide anunțul</button>
             </div>
- 
+
             <div class="store-section">
                 <div class="store-text">Nu ai aplicația instalată?</div>
                 <a class="btn-store" id="storeBtn" href="#">Descarcă din magazin</a>
             </div>
- 
+
             <script>
                 const ua = navigator.userAgent.toLowerCase();
                 const isIOS = /iphone|ipad|ipod/.test(ua);
                 const isAndroid = /android/.test(ua);
                 const storeUrl = isIOS ? '${appStore}' : '${playStore}';
- 
+
                 document.getElementById('storeBtn').href = storeUrl;
                 document.getElementById('storeBtn').textContent = isIOS ? 'Descarcă din App Store' : 'Descarcă din Google Play';
- 
+
                 function openApp() {
                     if (isAndroid) {
-                        window.location = '${appSchemeAndroid}';
+                        var a = document.createElement('a');
+                        a.href = '${appSchemeAndroid}';
+                        a.click();
                     } else {
                         window.location = '${appSchemeIOS}';
                     }
-                    setTimeout(() => { window.location = storeUrl; }, 2500);
+                    setTimeout(function() { window.location.href = storeUrl; }, 2500);
                 }
- 
+
                 if (isAndroid) openApp();
             </script>
         </body>
         </html>
     `);
 });
- 
+
 userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
     const { userId } = req.params;
     const appSchemeIOS = `carflip://profile/${userId}`;
     const appSchemeAndroid = `intent://profile/${userId}#Intent;scheme=carflip;package=com.mobilefrontendframe;end`;
     const playStore = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe';
     const appStore = 'https://apps.apple.com/ro/app/id6760683057';
- 
+
     res.send(`
         <!DOCTYPE html>
         <html>
@@ -2414,108 +2415,109 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
                 }
                 .logo-text {
                     color: white;
-                    font-size: 28px;
+                    font-size: 26px;
                     font-weight: 900;
-                    letter-spacing: 1px;
-                    margin-bottom: 30px;
+                    letter-spacing: 0.5px;
+                    margin-bottom: 28px;
                 }
                 .logo-accent { color: #ffcccc; }
                 .card {
-                    background: rgba(255, 255, 255, 0.1);
-                    border: 1px solid rgba(255, 255, 255, 0.15);
-                    border-radius: 20px;
-                    padding: 35px 25px;
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(255, 255, 255, 0.12);
+                    border-radius: 18px;
+                    padding: 30px 24px;
                     text-align: center;
-                    max-width: 340px;
+                    max-width: 320px;
                     width: 100%;
-                    backdrop-filter: blur(10px);
                 }
-                .icon { font-size: 44px; margin-bottom: 15px; }
+                .icon { font-size: 30px; margin-bottom: 12px; }
                 .title {
                     color: white;
-                    font-size: 20px;
+                    font-size: 18px;
                     font-weight: 700;
-                    margin-bottom: 8px;
+                    margin-bottom: 6px;
                 }
                 .subtitle {
-                    color: rgba(255, 255, 255, 0.65);
-                    font-size: 14px;
+                    color: rgba(255, 255, 255, 0.55);
+                    font-size: 13px;
                     line-height: 1.5;
-                    margin-bottom: 25px;
+                    margin-bottom: 22px;
                 }
                 .btn-open {
                     display: inline-block;
                     background: white;
                     color: #800000;
                     border: none;
-                    padding: 14px 40px;
-                    border-radius: 30px;
-                    font-size: 16px;
+                    padding: 13px 36px;
+                    border-radius: 28px;
+                    font-size: 15px;
                     font-weight: bold;
                     cursor: pointer;
                     width: 100%;
-                    max-width: 260px;
+                    max-width: 240px;
                     transition: transform 0.15s;
                 }
                 .btn-open:active { transform: scale(0.96); }
                 .store-section {
-                    margin-top: 40px;
+                    margin-top: 36px;
                     text-align: center;
                 }
                 .store-text {
-                    color: rgba(255, 255, 255, 0.5);
-                    font-size: 13px;
-                    margin-bottom: 12px;
+                    color: rgba(255, 255, 255, 0.4);
+                    font-size: 12px;
+                    margin-bottom: 10px;
                 }
                 .btn-store {
                     display: inline-block;
-                    background: rgba(255, 255, 255, 0.12);
-                    border: 1px solid rgba(255, 255, 255, 0.25);
+                    background: rgba(255, 255, 255, 0.1);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
                     color: white;
-                    padding: 12px 30px;
-                    border-radius: 25px;
-                    font-size: 14px;
+                    padding: 11px 26px;
+                    border-radius: 22px;
+                    font-size: 13px;
                     font-weight: 600;
                     cursor: pointer;
                     text-decoration: none;
                     transition: background 0.2s;
                 }
-                .btn-store:active { background: rgba(255, 255, 255, 0.2); }
+                .btn-store:active { background: rgba(255, 255, 255, 0.18); }
             </style>
         </head>
         <body>
             <div class="logo-text">Car<span class="logo-accent">Flip</span>.ro</div>
- 
+
             <div class="card">
                 <div class="icon">👤</div>
                 <div class="title">Se deschide CarFlip...</div>
                 <div class="subtitle">Dacă nu se deschide automat, apasă butonul de mai jos</div>
                 <button class="btn-open" onclick="openApp()">Deschide profilul</button>
             </div>
- 
+
             <div class="store-section">
                 <div class="store-text">Nu ai aplicația instalată?</div>
                 <a class="btn-store" id="storeBtn" href="#">Descarcă din magazin</a>
             </div>
- 
+
             <script>
                 const ua = navigator.userAgent.toLowerCase();
                 const isIOS = /iphone|ipad|ipod/.test(ua);
                 const isAndroid = /android/.test(ua);
                 const storeUrl = isIOS ? '${appStore}' : '${playStore}';
- 
+
                 document.getElementById('storeBtn').href = storeUrl;
                 document.getElementById('storeBtn').textContent = isIOS ? 'Descarcă din App Store' : 'Descarcă din Google Play';
- 
+
                 function openApp() {
                     if (isAndroid) {
-                        window.location = '${appSchemeAndroid}';
+                        var a = document.createElement('a');
+                        a.href = '${appSchemeAndroid}';
+                        a.click();
                     } else {
                         window.location = '${appSchemeIOS}';
                     }
-                    setTimeout(() => { window.location = storeUrl; }, 2500);
+                    setTimeout(function() { window.location.href = storeUrl; }, 2500);
                 }
- 
+
                 if (isAndroid) openApp();
             </script>
         </body>
