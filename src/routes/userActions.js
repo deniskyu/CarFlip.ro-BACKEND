@@ -2250,12 +2250,19 @@ userActions.get('/', (req, res) => {
 
 
 userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
+
     const { saleId } = req.params;
+
     const appSchemeIOS = `carflip://post/${saleId}`;
-    const appSchemeAndroid = `intent://post/${saleId}#Intent;scheme=carflip;package=com.mobilefrontendframe;end`;
+
     const fullUrl = `https://car-flip.com/post/${saleId}`;
+
     const playStore = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe';
+
     const appStore = 'https://apps.apple.com/ro/app/id6760683057';
+
+    const appSchemeAndroid = `intent://post/${saleId}#Intent;scheme=carflip;package=com.mobilefrontendframe;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url=${encodeURIComponent(playStore)};end`;
+
 
     res.send(`
         <!DOCTYPE html>
@@ -2264,6 +2271,7 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>CarFlip.ro</title>
+
             <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 body {
@@ -2381,6 +2389,7 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
                 .copied-toast.show { opacity: 1; }
             </style>
         </head>
+
         <body>
             <div class="logo-text">Car<span class="logo-accent">Flip</span>.ro</div>
 
@@ -2403,9 +2412,11 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
             <script>
                 var ua = navigator.userAgent || '';
                 var uaLower = ua.toLowerCase();
+
                 var isIOS = /iphone|ipad|ipod/.test(uaLower);
                 var isAndroid = /android/.test(uaLower);
                 var isWebView = /fbav|fban|fb_iab|instagram|whatsapp|twitter|snapchat|linkedin|line\\/|micromessenger|tiktok/i.test(ua);
+
                 var storeUrl = isIOS ? '${appStore}' : '${playStore}';
 
                 document.getElementById('storeBtn').href = storeUrl;
@@ -2416,17 +2427,12 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
                     document.getElementById('cardSubtitle').textContent = 'Acest link trebuie deschis în browserul telefonului';
                     document.getElementById('mainBtn').textContent = 'Copiază și deschide';
                     document.getElementById('mainBtn').onclick = function() { copyLink(); };
-                    document.getElementById('copyBtn').style.display = 'none';
                     document.getElementById('webviewHint').style.display = 'block';
                 }
 
                 function copyLink() {
                     var url = '${fullUrl}';
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(url).then(showToast).catch(fallbackCopy);
-                    } else {
-                        fallbackCopy();
-                    }
+                    navigator.clipboard?.writeText(url).then(showToast).catch(fallbackCopy);
                 }
 
                 function fallbackCopy() {
@@ -2453,8 +2459,7 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
                     }
 
                     if (isAndroid && !isWebView) {
-                        window.location = '${appSchemeAndroid}';
-                        setTimeout(function() { window.location.href = storeUrl; }, 2500);
+                        window.location.href = '${appSchemeAndroid}';
                     }
                 }
 
@@ -2466,12 +2471,19 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
 });
 
 userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
+
     const { userId } = req.params;
+
     const appSchemeIOS = `carflip://profile/${userId}`;
-    const appSchemeAndroid = `intent://profile/${userId}#Intent;scheme=carflip;package=com.mobilefrontendframe;end`;
+
     const fullUrl = `https://car-flip.com/profile/${userId}`;
+
     const playStore = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe';
+
     const appStore = 'https://apps.apple.com/ro/app/id6760683057';
+
+    const appSchemeAndroid = `intent://profile/${userId}#Intent;scheme=carflip;package=com.mobilefrontendframe;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url=${encodeURIComponent(playStore)};end`;
+
 
     res.send(`
         <!DOCTYPE html>
@@ -2480,6 +2492,7 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>CarFlip.ro</title>
+
             <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 body {
@@ -2597,6 +2610,7 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
                 .copied-toast.show { opacity: 1; }
             </style>
         </head>
+
         <body>
             <div class="logo-text">Car<span class="logo-accent">Flip</span>.ro</div>
 
@@ -2619,9 +2633,11 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
             <script>
                 var ua = navigator.userAgent || '';
                 var uaLower = ua.toLowerCase();
+
                 var isIOS = /iphone|ipad|ipod/.test(uaLower);
                 var isAndroid = /android/.test(uaLower);
                 var isWebView = /fbav|fban|fb_iab|instagram|whatsapp|twitter|snapchat|linkedin|line\\/|micromessenger|tiktok/i.test(ua);
+
                 var storeUrl = isIOS ? '${appStore}' : '${playStore}';
 
                 document.getElementById('storeBtn').href = storeUrl;
@@ -2669,8 +2685,7 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
                     }
 
                     if (isAndroid && !isWebView) {
-                        window.location = '${appSchemeAndroid}';
-                        setTimeout(function() { window.location.href = storeUrl; }, 2500);
+                        window.location.href = '${appSchemeAndroid}';
                     }
                 }
 
@@ -2680,6 +2695,7 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
         </html>
     `);
 });
+
 
 userActions.get('/info/stergere-cont', fetchLimiter, (req, res) => {
     res.send(`
