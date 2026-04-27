@@ -2253,6 +2253,8 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
     const { saleId } = req.params;
     const appSchemeIOS = `carflip://post/${saleId}`;
     const appSchemeAndroid = `intent://post/${saleId}#Intent;scheme=carflip;package=com.mobilefrontendframe;end`;
+    const fullUrl = `https://car-flip.com/post/${saleId}`;
+    const openInBrowser = `intent://${fullUrl.replace('https://', '')}#Intent;scheme=https;action=android.intent.action.VIEW;end`;
     const playStore = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe';
     const appStore = 'https://apps.apple.com/ro/app/id6760683057';
 
@@ -2343,6 +2345,12 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
                     transition: background 0.2s;
                 }
                 .btn-store:active { background: rgba(255, 255, 255, 0.18); }
+                .webview-notice {
+                    color: rgba(255, 255, 255, 0.45);
+                    font-size: 11px;
+                    margin-top: 14px;
+                    display: none;
+                }
             </style>
         </head>
         <body>
@@ -2350,9 +2358,10 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
 
             <div class="card">
                 <div class="icon">🚗</div>
-                <div class="title">Se deschide CarFlip...</div>
-                <div class="subtitle">Dacă nu se deschide automat, apasă butonul de mai jos</div>
-                <button class="btn-open" onclick="openApp()">Deschide anunțul</button>
+                <div class="title" id="cardTitle">Se deschide CarFlip...</div>
+                <div class="subtitle" id="cardSubtitle">Dacă nu se deschide automat, apasă butonul de mai jos</div>
+                <button class="btn-open" id="mainBtn" onclick="openApp()">Deschide anunțul</button>
+                <div class="webview-notice" id="webviewNotice">Linkurile nu pot fi deschise din această aplicație</div>
             </div>
 
             <div class="store-section">
@@ -2361,26 +2370,46 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
             </div>
 
             <script>
-                const ua = navigator.userAgent.toLowerCase();
-                const isIOS = /iphone|ipad|ipod/.test(ua);
-                const isAndroid = /android/.test(ua);
-                const storeUrl = isIOS ? '${appStore}' : '${playStore}';
+                var ua = navigator.userAgent || '';
+                var uaLower = ua.toLowerCase();
+                var isIOS = /iphone|ipad|ipod/.test(uaLower);
+                var isAndroid = /android/.test(uaLower);
+                var isWebView = /fbav|fban|fb_iab|instagram|whatsapp|twitter|snapchat|linkedin|line\\/|micromessenger|tiktok/i.test(ua);
+                var storeUrl = isIOS ? '${appStore}' : '${playStore}';
 
                 document.getElementById('storeBtn').href = storeUrl;
                 document.getElementById('storeBtn').textContent = isIOS ? 'Descarcă din App Store' : 'Descarcă din Google Play';
 
-                function openApp() {
-                    if (isAndroid) {
-                        var a = document.createElement('a');
-                        a.href = '${appSchemeAndroid}';
-                        a.click();
-                    } else {
-                        window.location = '${appSchemeIOS}';
-                    }
-                    setTimeout(function() { window.location.href = storeUrl; }, 2500);
+                if (isAndroid && isWebView) {
+                    document.getElementById('cardTitle').textContent = 'Deschide în browser';
+                    document.getElementById('cardSubtitle').textContent = 'Pentru a vedea anunțul, deschide linkul în browserul telefonului';
+                    document.getElementById('mainBtn').textContent = 'Deschide în browser';
+                    document.getElementById('webviewNotice').style.display = 'block';
+
+                    document.getElementById('mainBtn').onclick = function() {
+                        window.location.href = '${openInBrowser}';
+                    };
+
+                    document.getElementById('storeBtn').onclick = function(e) {
+                        e.preventDefault();
+                        window.location.href = 'intent://' + storeUrl.replace('https://', '') + '#Intent;scheme=https;action=android.intent.action.VIEW;end';
+                    };
                 }
 
-                if (isAndroid) openApp();
+                function openApp() {
+                    if (isIOS) {
+                        window.location = '${appSchemeIOS}';
+                        setTimeout(function() { window.location = storeUrl; }, 2500);
+                        return;
+                    }
+
+                    if (isAndroid && !isWebView) {
+                        window.location = '${appSchemeAndroid}';
+                        setTimeout(function() { window.location.href = storeUrl; }, 2500);
+                    }
+                }
+
+                if (isAndroid && !isWebView) openApp();
             </script>
         </body>
         </html>
@@ -2391,6 +2420,8 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
     const { userId } = req.params;
     const appSchemeIOS = `carflip://profile/${userId}`;
     const appSchemeAndroid = `intent://profile/${userId}#Intent;scheme=carflip;package=com.mobilefrontendframe;end`;
+    const fullUrl = `https://car-flip.com/profile/${userId}`;
+    const openInBrowser = `intent://${fullUrl.replace('https://', '')}#Intent;scheme=https;action=android.intent.action.VIEW;end`;
     const playStore = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe';
     const appStore = 'https://apps.apple.com/ro/app/id6760683057';
 
@@ -2481,6 +2512,12 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
                     transition: background 0.2s;
                 }
                 .btn-store:active { background: rgba(255, 255, 255, 0.18); }
+                .webview-notice {
+                    color: rgba(255, 255, 255, 0.45);
+                    font-size: 11px;
+                    margin-top: 14px;
+                    display: none;
+                }
             </style>
         </head>
         <body>
@@ -2488,9 +2525,10 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
 
             <div class="card">
                 <div class="icon">👤</div>
-                <div class="title">Se deschide CarFlip...</div>
-                <div class="subtitle">Dacă nu se deschide automat, apasă butonul de mai jos</div>
-                <button class="btn-open" onclick="openApp()">Deschide profilul</button>
+                <div class="title" id="cardTitle">Se deschide CarFlip...</div>
+                <div class="subtitle" id="cardSubtitle">Dacă nu se deschide automat, apasă butonul de mai jos</div>
+                <button class="btn-open" id="mainBtn" onclick="openApp()">Deschide profilul</button>
+                <div class="webview-notice" id="webviewNotice">Linkurile nu pot fi deschise din această aplicație</div>
             </div>
 
             <div class="store-section">
@@ -2499,26 +2537,46 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
             </div>
 
             <script>
-                const ua = navigator.userAgent.toLowerCase();
-                const isIOS = /iphone|ipad|ipod/.test(ua);
-                const isAndroid = /android/.test(ua);
-                const storeUrl = isIOS ? '${appStore}' : '${playStore}';
+                var ua = navigator.userAgent || '';
+                var uaLower = ua.toLowerCase();
+                var isIOS = /iphone|ipad|ipod/.test(uaLower);
+                var isAndroid = /android/.test(uaLower);
+                var isWebView = /fbav|fban|fb_iab|instagram|whatsapp|twitter|snapchat|linkedin|line\\/|micromessenger|tiktok/i.test(ua);
+                var storeUrl = isIOS ? '${appStore}' : '${playStore}';
 
                 document.getElementById('storeBtn').href = storeUrl;
                 document.getElementById('storeBtn').textContent = isIOS ? 'Descarcă din App Store' : 'Descarcă din Google Play';
 
-                function openApp() {
-                    if (isAndroid) {
-                        var a = document.createElement('a');
-                        a.href = '${appSchemeAndroid}';
-                        a.click();
-                    } else {
-                        window.location = '${appSchemeIOS}';
-                    }
-                    setTimeout(function() { window.location.href = storeUrl; }, 2500);
+                if (isAndroid && isWebView) {
+                    document.getElementById('cardTitle').textContent = 'Deschide în browser';
+                    document.getElementById('cardSubtitle').textContent = 'Pentru a vedea profilul, deschide linkul în browserul telefonului';
+                    document.getElementById('mainBtn').textContent = 'Deschide în browser';
+                    document.getElementById('webviewNotice').style.display = 'block';
+
+                    document.getElementById('mainBtn').onclick = function() {
+                        window.location.href = '${openInBrowser}';
+                    };
+
+                    document.getElementById('storeBtn').onclick = function(e) {
+                        e.preventDefault();
+                        window.location.href = 'intent://' + storeUrl.replace('https://', '') + '#Intent;scheme=https;action=android.intent.action.VIEW;end';
+                    };
                 }
 
-                if (isAndroid) openApp();
+                function openApp() {
+                    if (isIOS) {
+                        window.location = '${appSchemeIOS}';
+                        setTimeout(function() { window.location = storeUrl; }, 2500);
+                        return;
+                    }
+
+                    if (isAndroid && !isWebView) {
+                        window.location = '${appSchemeAndroid}';
+                        setTimeout(function() { window.location.href = storeUrl; }, 2500);
+                    }
+                }
+
+                if (isAndroid && !isWebView) openApp();
             </script>
         </body>
         </html>
