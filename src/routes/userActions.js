@@ -2107,12 +2107,155 @@ userActions.put('/api/sales/edit-with-media/:id',
 );
 
 
-userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
-    const { saleId } = req.params;
-    const appScheme = `carflip://post/${saleId}`;
-    const playStore = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe'
+userActions.get('/', (req, res) => {
+    const playStore = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe';
     const appStore = 'https://apps.apple.com/ro/app/id6760683057';
 
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="ro">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>CarFlip.ro — Piața auto, reinterpretată</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+
+                body {
+                    background-color: #FFFFFF;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 100vh;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+                    padding: 40px 24px;
+                    -webkit-font-smoothing: antialiased;
+                }
+
+                .logo {
+                    font-size: 42px;
+                    font-weight: 900;
+                    color: #081539;
+                    letter-spacing: -0.5px;
+                    margin-bottom: 48px;
+                }
+
+                .logo span {
+                    color: #800000;
+                }
+
+                .store-buttons {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 14px;
+                    margin-bottom: 56px;
+                }
+
+                .store-btn {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                    background: #081539;
+                    color: white;
+                    text-decoration: none;
+                    padding: 14px 32px;
+                    border-radius: 14px;
+                    min-width: 220px;
+                    transition: transform 0.15s, opacity 0.15s;
+                }
+
+                .store-btn:active {
+                    transform: scale(0.97);
+                    opacity: 0.9;
+                }
+
+                .store-btn svg {
+                    width: 22px;
+                    height: 22px;
+                    flex-shrink: 0;
+                }
+
+                .store-btn-text {
+                    display: flex;
+                    flex-direction: column;
+                    line-height: 1.2;
+                }
+
+                .store-btn-small {
+                    font-size: 10px;
+                    font-weight: 400;
+                    opacity: 0.8;
+                    letter-spacing: 0.3px;
+                }
+
+                .store-btn-name {
+                    font-size: 17px;
+                    font-weight: 700;
+                    letter-spacing: 0.2px;
+                }
+
+                .tagline {
+                    color: #800000;
+                    font-size: 15px;
+                    font-weight: 500;
+                    letter-spacing: 0.5px;
+                    opacity: 0.85;
+                }
+
+                @media (min-width: 480px) {
+                    .store-buttons {
+                        flex-direction: row;
+                        gap: 16px;
+                    }
+
+                    .logo {
+                        font-size: 52px;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="logo">Car<span>Flip</span>.ro</div>
+
+            <div class="store-buttons">
+                <a class="store-btn" href="${appStore}" target="_blank" rel="noopener">
+                    <svg viewBox="0 0 24 24" fill="white">
+                        <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                    </svg>
+                    <div class="store-btn-text">
+                        <span class="store-btn-small">Descarcă de pe</span>
+                        <span class="store-btn-name">App Store</span>
+                    </div>
+                </a>
+
+                <a class="store-btn" href="${playStore}" target="_blank" rel="noopener">
+                    <svg viewBox="0 0 24 24" fill="white">
+                        <path d="M3.61 1.814L13.793 12 3.61 22.186a.996.996 0 0 1-.61-.92V2.734a1 1 0 0 1 .61-.92zm1.4-.6L15.476 7.17l-2.99 2.993L5.01 1.214zm0 21.572l7.476-8.95-2.99-2.993-7.476 8.95-.01.006zM16.76 7.858l3.24 1.9a1 1 0 0 1 0 1.724l-3.24 1.9-3.22-3.224 3.22-3.3z"/>
+                    </svg>
+                    <div class="store-btn-text">
+                        <span class="store-btn-small">Disponibilă pe</span>
+                        <span class="store-btn-name">Google Play</span>
+                    </div>
+                </a>
+            </div>
+
+            <p class="tagline">Piața auto, reinterpretată.</p>
+        </body>
+        </html>
+    `);
+});
+
+
+userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
+    const { saleId } = req.params;
+    const appSchemeIOS = `carflip://post/${saleId}`;
+    const appSchemeAndroid = `intent://post/${saleId}#Intent;scheme=carflip;package=com.mobilefrontendframe;end`;
+    const playStore = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe';
+    const appStore = 'https://apps.apple.com/ro/app/id6760683057';
+ 
     res.send(`
         <!DOCTYPE html>
         <html>
@@ -2130,42 +2273,126 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
                     justify-content: center;
                     min-height: 100vh;
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                    padding: 30px 20px;
                 }
-                .text { color: white; font-size: 18px; margin-top: 20px; opacity: 0.9; }
-                .subtext { color: rgba(255,255,255,0.6); font-size: 14px; margin-top: 10px; }
+                .logo-text {
+                    color: white;
+                    font-size: 28px;
+                    font-weight: 900;
+                    letter-spacing: 1px;
+                    margin-bottom: 30px;
+                }
+                .logo-accent { color: #ffcccc; }
+                .card {
+                    background: rgba(255, 255, 255, 0.1);
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                    border-radius: 20px;
+                    padding: 35px 25px;
+                    text-align: center;
+                    max-width: 340px;
+                    width: 100%;
+                    backdrop-filter: blur(10px);
+                }
+                .icon { font-size: 44px; margin-bottom: 15px; }
+                .title {
+                    color: white;
+                    font-size: 20px;
+                    font-weight: 700;
+                    margin-bottom: 8px;
+                }
+                .subtitle {
+                    color: rgba(255, 255, 255, 0.65);
+                    font-size: 14px;
+                    line-height: 1.5;
+                    margin-bottom: 25px;
+                }
+                .btn-open {
+                    display: inline-block;
+                    background: white;
+                    color: #800000;
+                    border: none;
+                    padding: 14px 40px;
+                    border-radius: 30px;
+                    font-size: 16px;
+                    font-weight: bold;
+                    cursor: pointer;
+                    width: 100%;
+                    max-width: 260px;
+                    transition: transform 0.15s;
+                }
+                .btn-open:active { transform: scale(0.96); }
+                .store-section {
+                    margin-top: 40px;
+                    text-align: center;
+                }
+                .store-text {
+                    color: rgba(255, 255, 255, 0.5);
+                    font-size: 13px;
+                    margin-bottom: 12px;
+                }
+                .btn-store {
+                    display: inline-block;
+                    background: rgba(255, 255, 255, 0.12);
+                    border: 1px solid rgba(255, 255, 255, 0.25);
+                    color: white;
+                    padding: 12px 30px;
+                    border-radius: 25px;
+                    font-size: 14px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    text-decoration: none;
+                    transition: background 0.2s;
+                }
+                .btn-store:active { background: rgba(255, 255, 255, 0.2); }
             </style>
         </head>
         <body>
-            <p class="text">Se deschide CarFlip...</p>
-            <p class="subtext">Dacă nu se deschide automat, apasă butonul</p>
-            <button onclick="openApp()" style="margin-top:20px; background:white; color:#800000; border:none; padding:14px 36px; border-radius:25px; font-size:16px; font-weight:bold; cursor:pointer;">
-                Deschide anunțul
-            </button>
+            <div class="logo-text">Car<span class="logo-accent">Flip</span>.ro</div>
+ 
+            <div class="card">
+                <div class="icon">🚗</div>
+                <div class="title">Se deschide CarFlip...</div>
+                <div class="subtitle">Dacă nu se deschide automat, apasă butonul de mai jos</div>
+                <button class="btn-open" onclick="openApp()">Deschide anunțul</button>
+            </div>
+ 
+            <div class="store-section">
+                <div class="store-text">Nu ai aplicația instalată?</div>
+                <a class="btn-store" id="storeBtn" href="#">Descarcă din magazin</a>
+            </div>
+ 
             <script>
                 const ua = navigator.userAgent.toLowerCase();
                 const isIOS = /iphone|ipad|ipod/.test(ua);
                 const isAndroid = /android/.test(ua);
                 const storeUrl = isIOS ? '${appStore}' : '${playStore}';
-
+ 
+                document.getElementById('storeBtn').href = storeUrl;
+                document.getElementById('storeBtn').textContent = isIOS ? 'Descarcă din App Store' : 'Descarcă din Google Play';
+ 
                 function openApp() {
-                    window.location = '${appScheme}';
+                    if (isAndroid) {
+                        window.location = '${appSchemeAndroid}';
+                    } else {
+                        window.location = '${appSchemeIOS}';
+                    }
                     setTimeout(() => { window.location = storeUrl; }, 2500);
                 }
-
-                // Pe Android mergem automat, pe iOS Safari necesită gesture
+ 
                 if (isAndroid) openApp();
             </script>
         </body>
         </html>
     `);
 });
-
+ 
 userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
     const { userId } = req.params;
-    const appScheme = `carflip://profile/${userId}`;
+    const appSchemeIOS = `carflip://profile/${userId}`;
+    const appSchemeAndroid = `intent://profile/${userId}#Intent;scheme=carflip;package=com.mobilefrontendframe;end`;
     const playStore = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe';
     const appStore = 'https://apps.apple.com/ro/app/id6760683057';
-
+ 
     res.send(`
         <!DOCTYPE html>
         <html>
@@ -2183,28 +2410,112 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
                     justify-content: center;
                     min-height: 100vh;
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                    padding: 30px 20px;
                 }
-                .text { color: white; font-size: 18px; margin-top: 20px; opacity: 0.9; }
-                .subtext { color: rgba(255,255,255,0.6); font-size: 14px; margin-top: 10px; }
+                .logo-text {
+                    color: white;
+                    font-size: 28px;
+                    font-weight: 900;
+                    letter-spacing: 1px;
+                    margin-bottom: 30px;
+                }
+                .logo-accent { color: #ffcccc; }
+                .card {
+                    background: rgba(255, 255, 255, 0.1);
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                    border-radius: 20px;
+                    padding: 35px 25px;
+                    text-align: center;
+                    max-width: 340px;
+                    width: 100%;
+                    backdrop-filter: blur(10px);
+                }
+                .icon { font-size: 44px; margin-bottom: 15px; }
+                .title {
+                    color: white;
+                    font-size: 20px;
+                    font-weight: 700;
+                    margin-bottom: 8px;
+                }
+                .subtitle {
+                    color: rgba(255, 255, 255, 0.65);
+                    font-size: 14px;
+                    line-height: 1.5;
+                    margin-bottom: 25px;
+                }
+                .btn-open {
+                    display: inline-block;
+                    background: white;
+                    color: #800000;
+                    border: none;
+                    padding: 14px 40px;
+                    border-radius: 30px;
+                    font-size: 16px;
+                    font-weight: bold;
+                    cursor: pointer;
+                    width: 100%;
+                    max-width: 260px;
+                    transition: transform 0.15s;
+                }
+                .btn-open:active { transform: scale(0.96); }
+                .store-section {
+                    margin-top: 40px;
+                    text-align: center;
+                }
+                .store-text {
+                    color: rgba(255, 255, 255, 0.5);
+                    font-size: 13px;
+                    margin-bottom: 12px;
+                }
+                .btn-store {
+                    display: inline-block;
+                    background: rgba(255, 255, 255, 0.12);
+                    border: 1px solid rgba(255, 255, 255, 0.25);
+                    color: white;
+                    padding: 12px 30px;
+                    border-radius: 25px;
+                    font-size: 14px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    text-decoration: none;
+                    transition: background 0.2s;
+                }
+                .btn-store:active { background: rgba(255, 255, 255, 0.2); }
             </style>
         </head>
         <body>
-            <p class="text">Se deschide CarFlip...</p>
-            <p class="subtext">Dacă nu se deschide automat, apasă butonul</p>
-            <button onclick="openApp()" style="margin-top:20px; background:white; color:#800000; border:none; padding:14px 36px; border-radius:25px; font-size:16px; font-weight:bold; cursor:pointer;">
-                Deschide profilul
-            </button>
+            <div class="logo-text">Car<span class="logo-accent">Flip</span>.ro</div>
+ 
+            <div class="card">
+                <div class="icon">👤</div>
+                <div class="title">Se deschide CarFlip...</div>
+                <div class="subtitle">Dacă nu se deschide automat, apasă butonul de mai jos</div>
+                <button class="btn-open" onclick="openApp()">Deschide profilul</button>
+            </div>
+ 
+            <div class="store-section">
+                <div class="store-text">Nu ai aplicația instalată?</div>
+                <a class="btn-store" id="storeBtn" href="#">Descarcă din magazin</a>
+            </div>
+ 
             <script>
                 const ua = navigator.userAgent.toLowerCase();
                 const isIOS = /iphone|ipad|ipod/.test(ua);
                 const isAndroid = /android/.test(ua);
                 const storeUrl = isIOS ? '${appStore}' : '${playStore}';
-
+ 
+                document.getElementById('storeBtn').href = storeUrl;
+                document.getElementById('storeBtn').textContent = isIOS ? 'Descarcă din App Store' : 'Descarcă din Google Play';
+ 
                 function openApp() {
-                    window.location = '${appScheme}';
+                    if (isAndroid) {
+                        window.location = '${appSchemeAndroid}';
+                    } else {
+                        window.location = '${appSchemeIOS}';
+                    }
                     setTimeout(() => { window.location = storeUrl; }, 2500);
                 }
-
+ 
                 if (isAndroid) openApp();
             </script>
         </body>
@@ -2551,5 +2862,7 @@ userActions.get('/api/sales/search-list', authUser, fetchLimiter, async (req, re
         return res.status(500).json({ success: false, message: "Eroare căutare." });
     }
 });
+
+
 
 export default userActions;
