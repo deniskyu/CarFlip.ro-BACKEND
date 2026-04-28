@@ -2463,7 +2463,6 @@ userActions.get('/post/:saleId', fetchLimiter, (req, res) => {
                     }
                 }
 
-                if (isAndroid && !isWebView) openApp();
             </script>
         </body>
         </html>
@@ -2689,7 +2688,6 @@ userActions.get('/profile/:userId', fetchLimiter, (req, res) => {
                     }
                 }
 
-                if (isAndroid && !isWebView) openApp();
             </script>
         </body>
         </html>
