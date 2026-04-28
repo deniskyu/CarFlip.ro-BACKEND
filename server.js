@@ -20,7 +20,15 @@ dotenv.config();
 const app = express();
 const httpServer = createServer(app)
 
-app.use(helmet());
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+        }
+    }
+}));
 app.set('trust proxy', 2);
 
 
