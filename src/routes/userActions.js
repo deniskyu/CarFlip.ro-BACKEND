@@ -107,6 +107,20 @@ userActions.post('/api/sale/post/free',
                 return res.status(400).json({ success: false, message: "Te rugăm să completezi toate câmpurile esențiale." });
             }
 
+            if (title.trim().length > 35) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "Titlul este prea lung. Maxim 35 de caractere permise." 
+                });
+            }
+
+            if (description.trim().length > 1000) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "Descrierea este prea lungă. Limita maximă este de 1000 de caractere." 
+                });
+            }
+
             if (!req.files || req.files.length === 0) {
                 return res.status(400).json({ success: false, message: "Este necesar cel puțin un fișier media (poză/video)." });
             }
@@ -1888,6 +1902,20 @@ userActions.put('/api/sales/edit/:id', authUser, fetchLimiter, async (req, res) 
             title
         } = req.body;
 
+        if (title !== undefined && title.trim().length > 35) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "Titlul este prea lung. Maxim 35 de caractere permise." 
+            });
+        }
+
+        if (description !== undefined && description.trim().length > 1000) {
+            return res.status(400).json({ 
+                success: false, 
+                message: "Descrierea este prea lungă. Limita maximă este de 1000 de caractere." 
+            });
+        }
+
 
         // 2. Găsim anunțul și validăm proprietarul
         const sale = await sales.findById(id);
@@ -1995,6 +2023,20 @@ userActions.put('/api/sales/edit-with-media/:id',
                 media_metadata,     // JSON string cu zoom-urile fișierelor noi
                 title
             } = req.body;
+
+            if (title !== undefined && title.trim().length > 35) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "Titlul este prea lung. Maxim 35 de caractere permise." 
+                });
+            }
+
+            if (description !== undefined && description.trim().length > 1000) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "Descrierea este prea lungă. Limita maximă este de 1000 de caractere." 
+                });
+            }
 
             // 2. Găsim anunțul și validăm proprietarul
             const sale = await sales.findById(id);
