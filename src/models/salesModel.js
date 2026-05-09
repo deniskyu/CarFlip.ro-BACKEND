@@ -9,7 +9,7 @@ const saleSchema = new mongoose.Schema({
     user_name: { type: String },
     user_image: { type: String },
     
-    title: { type: String, required: true, maxlength: 25 },
+    title: { type: String, required: true, maxlength: 35 },
 
     brand: {
         id: { type: Number, required: true },
