@@ -13,8 +13,14 @@ const messageSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['text', 'image'],
+        enum: ['text', 'image', 'sale_link'],
         default: 'text'
+    },
+    sale_preview: {
+        sale_id: { type: mongoose.Schema.Types.ObjectId, ref: 'sales' },
+        image_url: { type: String },
+        title: { type: String },
+        price: { type: Number }
     },
     text: {
         type: String,

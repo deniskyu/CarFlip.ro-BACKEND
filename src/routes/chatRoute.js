@@ -9,6 +9,7 @@ import Message from '../models/messageModel.js';
 import users from '../models/userModel.js';
 import { getIO } from '../socket/socketManager.js';
 import { sendAndSaveNotification } from '../services/notificationService.js';
+import sales from '../models/salesModel.js';
 
 const chatRoute = Router();
 
@@ -537,6 +538,168 @@ chatRoute.delete('/api/chat/messages/:messageId', authUser, fetchLimiter, async 
 
     } catch (error) {
         console.error('❌ Eroare delete mesaj:', error);
+        return res.status(500).json({ success: false, message: 'Eroare server.' });
+    }
+});
+
+// ==========================================
+// 9. POST: Trimite mesaj cu link anunț
+// ==========================================
+chatRoute.post('/api/chat/send-sale-message', authUser, fetchLimiter, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { targetUserId, saleId, text } = req.body;
+
+        // ── Validări de bază ─────────────────────────────────────────
+        if (!targetUserId || !saleId) {
+            return res.status(400).json({ success: false, message: 'targetUserId și saleId sunt obligatorii.' });
+        }
+
+        if (targetUserId === userId) {
+            return res.status(400).json({ success: false, message: 'Nu poți trimite mesaj pe propriul anunț.' });
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(targetUserId) || !mongoose.Types.ObjectId.isValid(saleId)) {
+            return res.status(400).json({ success: false, message: 'ID-uri invalide.' });
+        }
+
+        // ── Validare text (opțional, max 500 caractere) ──────────────
+        let sanitizedText = null;
+        if (text && typeof text === 'string') {
+            const trimmed = text.trim();
+            if (trimmed.length > 500) {
+                return res.status(400).json({ success: false, message: 'Mesajul nu poate depăși 500 de caractere.' });
+            }
+            if (trimmed.length > 0) {
+                sanitizedText = trimmed;
+            }
+        }
+
+        // ── Verificare block bilateral ───────────────────────────────
+        const isBlocked = await checkBlocked(userId, targetUserId);
+        if (isBlocked) {
+            return res.status(403).json({ success: false, message: 'Nu poți trimite mesaje acestui utilizator.' });
+        }
+
+        // ── Verificare target user există ────────────────────────────
+        const targetUser = await users.findById(targetUserId).select('username icon').lean();
+        if (!targetUser) {
+            return res.status(404).json({ success: false, message: 'Utilizator negăsit.' });
+        }
+
+        const sale = await sales.findById(saleId)
+            .select('title price media user_id is_active')
+            .lean();
+
+        if (!sale || !sale.is_active) {
+            return res.status(404).json({ success: false, message: 'Anunțul nu mai este disponibil.' });
+        }
+
+        // ── Extragem prima imagine pentru preview ────────────────────
+        let previewImageUrl = null;
+        if (sale.media && sale.media.length > 0) {
+            const firstImage = sale.media.find(m => m.type === 'image');
+            previewImageUrl = firstImage ? firstImage.url : sale.media[0].url;
+        }
+
+        // ── Creează sau găsește conversația ───────────────────────────
+        let conversation = await Conversation.findOne({
+            participants: { $all: [userId, targetUserId], $size: 2 }
+        });
+
+        if (!conversation) {
+            conversation = await Conversation.create({
+                participants: [userId, targetUserId],
+                unread_counts: { [userId]: 0, [targetUserId]: 0 }
+            });
+        } else {
+            // Dacă vreunul a șters-o, o readucem
+            const deletedByArray = conversation.deleted_by || [];
+            const pullIds = [];
+            if (deletedByArray.some(id => id.toString() === userId)) pullIds.push(userId);
+            if (deletedByArray.some(id => id.toString() === targetUserId)) pullIds.push(targetUserId);
+            if (pullIds.length > 0) {
+                await Conversation.findByIdAndUpdate(conversation._id, {
+                    $pull: { deleted_by: { $in: pullIds } }
+                });
+            }
+        }
+
+        const conversationId = conversation._id.toString();
+
+        // ── Creează mesajul ──────────────────────────────────────────
+        const newMessage = await Message.create({
+            conversation_id: conversation._id,
+            sender_id: userId,
+            type: 'sale_link',
+            text: sanitizedText,
+            sale_preview: {
+                sale_id: saleId,
+                image_url: previewImageUrl,
+                title: sale.title || 'Anunț',
+                price: sale.price || 0
+            }
+        });
+
+        // ── Actualizează conversația ─────────────────────────────────
+        const previewTitle = sale.title || 'Anunț';
+        await Conversation.findByIdAndUpdate(conversation._id, {
+            last_message: `🚗 ${previewTitle}`,
+            last_message_type: 'text',
+            last_message_at: new Date(),
+            $inc: { [`unread_counts.${targetUserId}`]: 1 },
+            $pull: { deleted_by: targetUserId }
+        });
+
+        // ── Populează mesajul pentru emit ─────────────────────────────
+        const populatedMessage = await Message.findById(newMessage._id)
+            .populate('sender_id', 'username icon')
+            .lean();
+
+        // ── Socket emit ──────────────────────────────────────────────
+        const io = getIO();
+        if (io) {
+            io.in(`user_${targetUserId}`).socketsJoin(`conv_${conversationId}`);
+            io.in(`user_${userId}`).socketsJoin(`conv_${conversationId}`);
+
+            io.to(`conv_${conversationId}`).emit('new_message', populatedMessage);
+            io.to(`conv_${conversationId}`).emit('conversation_updated', {
+                conversationId,
+                last_message: `🚗 ${previewTitle}`,
+                last_message_type: 'text',
+                last_message_at: new Date()
+            });
+        }
+
+        // ── FCM notificare ───────────────────────────────────────────
+        const senderData = await users.findById(userId).select('username icon').lean();
+        await sendAndSaveNotification(
+            [targetUserId],
+            {
+                type: 'NEW_MESSAGE',
+                title: senderData?.username || 'Mesaj nou',
+                body: `🚗 Ți-a trimis un mesaj despre "${previewTitle}"`,
+                saleId: null,
+                commentId: conversationId
+            },
+            {
+                id: userId,
+                name: senderData?.username || '',
+                image: senderData?.icon || ''
+            }
+        );
+
+        return res.json({
+            success: true,
+            data: {
+                message: populatedMessage,
+                conversationId,
+                participant: targetUser
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ POST /api/chat/send-sale-message:', error);
         return res.status(500).json({ success: false, message: 'Eroare server.' });
     }
 });
