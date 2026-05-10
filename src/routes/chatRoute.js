@@ -506,6 +506,7 @@ chatRoute.delete('/api/chat/messages/:messageId', authUser, fetchLimiter, async 
         message.text = 'Acest mesaj a fost șters';
         message.image_url = null;
         message.image_public_id = null;
+        message.sale_preview = null;
         message.is_deleted = true;
         await message.save();
 
