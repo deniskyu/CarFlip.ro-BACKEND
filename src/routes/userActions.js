@@ -1952,7 +1952,13 @@ userActions.put('/api/sales/edit/:id', authUser, fetchLimiter, async (req, res) 
             const parsedPrice = Number(String(price).replace(/[^0-9]/g, ''));
             sale.price = !isNaN(parsedPrice) ? parsedPrice : sale.price;
         }
-        if (title !== undefined) sale.title = sanitize(title);
+        if (title !== undefined) {
+            const trimmed = sanitize(title).trim();
+            if (trimmed.length > 0) {
+                sale.title = trimmed;
+            }
+            // Dacă vine gol, nu atingem sale.title — rămâne cel existent
+        }
         if (mileage !== undefined) {
             const parsedMileage = Number(String(mileage).replace(/[^0-9]/g, ''));
             sale.mileage = !isNaN(parsedMileage) ? parsedMileage : sale.mileage;
@@ -2103,7 +2109,13 @@ userActions.put('/api/sales/edit-with-media/:id',
                 const parsedPrice = Number(String(price).replace(/[^0-9]/g, ''));
                 sale.price = !isNaN(parsedPrice) ? parsedPrice : sale.price;
             }
-            if (title !== undefined) sale.title = sanitize(title);
+            if (title !== undefined) {
+                const trimmed = sanitize(title).trim();
+                if (trimmed.length > 0) {
+                    sale.title = trimmed;
+                }
+                // Dacă vine gol, nu atingem sale.title — rămâne cel existent
+            }
             if (mileage !== undefined) {
                 const parsedMileage = Number(String(mileage).replace(/[^0-9]/g, ''));
                 sale.mileage = !isNaN(parsedMileage) ? parsedMileage : sale.mileage;
