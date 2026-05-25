@@ -466,13 +466,14 @@ userActions.get('/api/sales/feed', authUser, fetchLimiter, async (req, res) => {
 
         // Cursor pagination (exact ca înainte)
         if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
-            baseMatch._id = { $lt: new mongoose.Types.ObjectId(cursor) };
+            const cursorOp = mode === 'history' ? '$gt' : '$lt';
+            baseMatch._id = { [cursorOp]: new mongoose.Types.ObjectId(cursor) };
         }
 
         pipeline.push({ $match: baseMatch });
 
         // STEP 2: Sortare descrescătoare (cele mai noi primele)
-        pipeline.push({ $sort: { _id: -1 } });
+        pipeline.push({ $sort: { _id: mode === 'history' ? 1 : -1 } });
 
         // STEP 3: $lookup pe SeenPost — verifică dacă userul a văzut fiecare post
         // În loc să încărcăm 1500 IDs și să facem $nin, MongoDB verifică
