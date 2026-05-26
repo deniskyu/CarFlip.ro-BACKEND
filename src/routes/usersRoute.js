@@ -526,8 +526,14 @@ userRoute.get('/api/user/data',
             const findUser = await users.findById(req.user.id)
             if (!findUser)
                 return res.json({ success: false });
-            const { username, email } = findUser;
-            return res.json({ success: true, message: "Am gasit userul cu succes.", username, email })
+            const { username, email, metaData } = findUser;
+            return res.json({ 
+                success: true, 
+                message: "Am gasit userul cu succes.", 
+                username, 
+                email,
+                preferredCounty: metaData?.preferredCounty || null
+            })
         } catch (er) {
             return res.json({ success: false, message: "Eroare la gasirea userului." });
         }
@@ -759,5 +765,71 @@ userRoute.delete('/api/user/delete-account',
         }
     }
 );
+
+// ============================================================================
+//  PUT /api/user/preferred-county  —  salvează / șterge județul preferat
+// ----------------------------------------------------------------------------
+//  Se adaugă în usersRoute.js, pe ACELAȘI router pe care e definit
+//  /api/user/data. Mai jos router-ul e numit `router` — înlocuiește-l cu
+//  numele real al router-ului din fișierul tău (cel pe care faci .get/.post).
+//
+//  Body:
+//    { "county": "Cluj" }            → setează județul preferat
+//    { "county": null } / "" / lipsă → șterge preferința (revine la feed normal)
+//
+//  • Salvează în metaData.preferredCounty cu $set dot-notation → NU atinge
+//    alte chei din metaData.
+//  • La ștergere folosește $unset → nu lasă o cheie null în urmă.
+//  • Fără whitelist de județe: backend-ul nu ține lista de județe (e în
+//    staticData.js, pe frontend), iar ruta de postare oricum nu validează.
+//    Dacă s-ar salva un județ inexistent, Tier A din feed e pur și simplu
+//    gol, iar feed-ul degradează curat la varianta normală. Length cap-ul
+//    de 100 caractere previne abuzul de stocare.
+//
+//  Ruta de feed (/api/sales/feed) citește metaData.preferredCounty:
+//    setat   → feed prioritizat pe județ
+//    absent  → feed identic cu cel de azi
+// ============================================================================
+
+userRoute.put('/api/user/preferred-county', authUser, fetchLimiter, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        if (!userId)
+            return res.json({ success: false, message: "Sesiune expirata" });
+
+        const raw = req.body ? req.body.county : null;
+
+        // Normalizare: string ne-gol și rezonabil ca lungime → îl păstrăm.
+        // Orice altceva (null, "", non-string, prea lung) → preferință ștearsă.
+        let countyValue = null;
+        if (typeof raw === 'string') {
+            const trimmed = raw.trim();
+            if (trimmed.length > 0 && trimmed.length <= 100) {
+                countyValue = trimmed;
+            }
+        }
+
+        // Setăm sau ștergem, fără să atingem restul lui metaData.
+        const update = countyValue !== null
+            ? { $set:   { 'metaData.preferredCounty': countyValue } }
+            : { $unset: { 'metaData.preferredCounty': '' } };
+
+        const updated = await users.findByIdAndUpdate(userId, update, { new: true })
+            .select('_id');
+
+        if (!updated)
+            return res.json({ success: false, message: "Utilizator inexistent." });
+
+        // countyValue: string = județul setat,  null = preferința a fost ștearsă.
+        return res.json({
+            success: true,
+            preferredCounty: countyValue
+        });
+
+    } catch (error) {
+        console.error("Preferred County Error:", error);
+        return res.status(500).json({ success: false, message: "Eroare la salvarea județului." });
+    }
+});
 
 export default userRoute;

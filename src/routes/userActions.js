@@ -434,11 +434,44 @@ userActions.post('/api/sale/post/free',
     }
 });*/
 
+// ============================================================================
+//  /api/sales/feed  —  versiune cu prioritizare pe județ (mode=new)
+// ----------------------------------------------------------------------------
+//  Înlocuiește INTEGRAL ruta existentă /api/sales/feed din userActions.
+//  NU modifică nimic altceva din fișier. Drop-in 1:1.
+//
+//  Comportament:
+//   • mode=history  → identic cu varianta curentă (ascendent _id, cursor $gt).
+//   • mode=new, FĂRĂ metaData.preferredCounty → identic cu varianta curentă
+//                     (descendent _id, cursor brut ObjectId, $lt).
+//   • mode=new, CU  metaData.preferredCounty → întâi anunțurile nevăzute din
+//                     județul preferat (Tier A), apoi restul (Tier B).
+//
+//  Cursor:
+//   • history / new-fără-județ → cursor brut = ObjectId (24 hex), exact ca azi.
+//   • new-cu-județ             → cursor compus base64url { t:'A'|'B', id? }.
+//   Decodarea e defensivă: orice cursor nerecunoscut → reia de la început,
+//   niciodată crash.
+//
+//  Notă pe care trebuie să o știi (transparență):
+//   Față de varianta veche, filtrul „autor șters" (user_id != null) a fost
+//   mutat ÎNAINTE de $limit. Pentru history / new-fără-județ asta e invizibil
+//   pentru user (aceleași anunțuri, în aceeași ordine; paginile sunt doar
+//   mereu pline în loc de ocazional scurte). Pentru tier-urile de județ e
+//   OBLIGATORIU: face ca „un tier a întors < limit ⟺ tier epuizat" să fie un
+//   semnal sigur — pe el se sprijină toată logica. Fără el, o pagină scurtată
+//   de un autor șters ar fi citită greșit drept „județ epuizat" și ar sări
+//   anunțuri.
+// ============================================================================
+
 userActions.get('/api/sales/feed', authUser, fetchLimiter, async (req, res) => {
     try {
-        const limit = parseInt(req.query.limit) || 10;
-        const cursor = req.query.cursor; 
-        const mode = req.query.mode || 'new'; 
+        // ── Parametri ────────────────────────────────────────────────────
+        const limitRaw = parseInt(req.query.limit);
+        // guard: $limit nu primește niciodată 0 / negativ / NaN
+        const limit = Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 10);
+        const rawCursor = req.query.cursor;
+        const mode = req.query.mode || 'new';
 
         const userId = req.user.id;
         if (!userId)
@@ -446,147 +479,255 @@ userActions.get('/api/sales/feed', authUser, fetchLimiter, async (req, res) => {
 
         const userObjectId = new mongoose.Types.ObjectId(userId);
 
-        const currentUserData = await users.findById(userId).select('blocking blocked_by');
+        // metaData adăugat în select față de varianta veche, pentru preferredCounty
+        const currentUserData = await users.findById(userId).select('blocking blocked_by metaData');
+        // guard: user șters între emiterea token-ului și request → fără 500
+        if (!currentUserData)
+            return res.json({ success: false, message: "Sesiune expirata" });
 
         const excludedUserIds = [
             ...(currentUserData.blocking || []),
             ...(currentUserData.blocked_by || [])
         ].map(id => new mongoose.Types.ObjectId(id));
 
-        // ── CONSTRUIM AGGREGATION PIPELINE ────────────────────────────────
+        const preferredCountyRaw = currentUserData.metaData && currentUserData.metaData.preferredCounty;
+        const preferredCounty = (typeof preferredCountyRaw === 'string' && preferredCountyRaw.trim())
+            ? preferredCountyRaw.trim()
+            : null;
 
-        const pipeline = [];
+        // ── Helper: validare ObjectId strict (exact 24 caractere hex) ────
+        const isHex24 = (s) => typeof s === 'string' && /^[a-f0-9]{24}$/i.test(s);
 
-        // STEP 1: Match de bază — active + exclude blocked users
+        // ── Helper: encode cursor compus (doar pentru new-cu-județ) ──────
+        const encodeCursor = (payload) =>
+            Buffer.from(JSON.stringify(payload)).toString('base64url');
+
+        // ── Helper: decode cursor — întoarce { tier, id } normalizat ─────
+        //  • lipsă / necunoscut → { tier:null, id:null }  (reia de la zero)
+        //  • ObjectId brut      → { tier:null, id:ObjectId }
+        //  • base64 { t, id }   → { tier:'A'|'B', id:ObjectId|null }
+        const decodeCursor = (raw) => {
+            if (!raw || typeof raw !== 'string') return { tier: null, id: null };
+            // întâi încercăm formatul compus (base64url JSON)
+            try {
+                const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
+                if (parsed && (parsed.t === 'A' || parsed.t === 'B')) {
+                    return {
+                        tier: parsed.t,
+                        id: isHex24(parsed.id) ? new mongoose.Types.ObjectId(parsed.id) : null
+                    };
+                }
+            } catch (e) { /* nu e cursor compus — continuăm */ }
+            // apoi ObjectId brut (history / new-fără-județ)
+            if (isHex24(raw)) return { tier: null, id: new mongoose.Types.ObjectId(raw) };
+            // nerecunoscut → start curat
+            return { tier: null, id: null };
+        };
+
+        // ── Helper: rulează o pagină de feed pentru un $match dat ────────
+        //  IMPORTANT: $match { user_id != null } e ÎNAINTE de $limit, ca
+        //  $limit să întoarcă exact `pageLimit` anunțuri complet valide
+        //  (când există atâtea) → „rezultat < pageLimit" = semnal sigur de
+        //  „epuizat". Restul pipeline-ului e identic cu varianta veche.
+        const runFeedPage = async ({ matchStage, sortDir, seenMode, pageLimit }) => {
+            const pipeline = [
+                // STEP 1: match de bază (active + blocked + cursor)
+                { $match: matchStage },
+
+                // STEP 2: sortare pe _id
+                { $sort: { _id: sortDir } },
+
+                // STEP 3: $lookup pe SeenPost — văzut / nevăzut, O(1) pe index
+                {
+                    $lookup: {
+                        from: 'seenposts',
+                        let: { saleId: '$_id' },
+                        pipeline: [
+                            { $match: { $expr: { $and: [
+                                { $eq: ['$sale_id', '$$saleId'] },
+                                { $eq: ['$user_id', userObjectId] }
+                            ] } } },
+                            { $limit: 1 }
+                        ],
+                        as: 'seenCheck'
+                    }
+                },
+
+                // STEP 4: filtru seen / unseen
+                (seenMode === 'unseen'
+                    ? { $match: { seenCheck: { $size: 0 } } }
+                    : { $match: { 'seenCheck.0': { $exists: true } } }),
+
+                // STEP 5: populate user_id (username + email)
+                {
+                    $lookup: {
+                        from: 'users',
+                        localField: 'user_id',
+                        foreignField: '_id',
+                        pipeline: [ { $project: { username: 1, email: 1 } } ],
+                        as: '_user_populated'
+                    }
+                },
+                { $addFields: { user_id: { $arrayElemAt: ['$_user_populated', 0] } } },
+
+                // STEP 6: scoatem anunțurile cu autor șters — ÎNAINTE de $limit
+                { $match: { user_id: { $ne: null } } },
+
+                // STEP 7: limităm la o pagină de anunțuri complet valide
+                { $limit: pageLimit },
+
+                // STEP 8: hasLiked calculat pe setul mic (post-limit)
+                {
+                    $addFields: {
+                        hasLiked: {
+                            $cond: {
+                                if: { $isArray: '$liked_by' },
+                                then: { $anyElementTrue: { $map: {
+                                    input: '$liked_by',
+                                    as: 'like',
+                                    in: { $eq: ['$$like.user_id', userObjectId] }
+                                } } },
+                                else: false
+                            }
+                        }
+                    }
+                },
+
+                // STEP 9: curățăm câmpurile interne
+                { $project: { liked_by: 0, seenCheck: 0, _user_populated: 0 } }
+            ];
+            return sales.aggregate(pipeline);
+        };
+
+        // ── $match de bază, comun tuturor ramurilor ──────────────────────
         const baseMatch = { is_active: true };
-
         if (excludedUserIds.length > 0) {
             baseMatch.user_id = { $nin: excludedUserIds };
         }
 
-        // Cursor pagination (exact ca înainte)
-        if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
-            const cursorOp = mode === 'history' ? '$gt' : '$lt';
-            baseMatch._id = { [cursorOp]: new mongoose.Types.ObjectId(cursor) };
-        }
+        const decoded = decodeCursor(rawCursor);
 
-        pipeline.push({ $match: baseMatch });
+        // ════════════════════════════════════════════════════════════════
+        //  RAMURA 1 — HISTORY  (identic cu varianta curentă)
+        // ════════════════════════════════════════════════════════════════
+        if (mode !== 'new') {
+            const matchStage = { ...baseMatch };
+            // history folosește cursor brut; un cursor compus rătăcit → reluăm
+            const histId = (decoded.tier === null) ? decoded.id : null;
+            if (histId) matchStage._id = { $gt: histId };
 
-        // STEP 2: Sortare descrescătoare (cele mai noi primele)
-        pipeline.push({ $sort: { _id: mode === 'history' ? 1 : -1 } });
+            const results = await runFeedPage({
+                matchStage, sortDir: 1, seenMode: 'seen', pageLimit: limit
+            });
 
-        // STEP 3: $lookup pe SeenPost — verifică dacă userul a văzut fiecare post
-        // În loc să încărcăm 1500 IDs și să facem $nin, MongoDB verifică
-        // fiecare post individual contra indexului { user_id: 1, sale_id: 1 } → O(1)
-        pipeline.push({
-            $lookup: {
-                from: 'seenposts',
-                let: { saleId: '$_id' },
-                pipeline: [
-                    {
-                        $match: {
-                            $expr: {
-                                $and: [
-                                    { $eq: ['$sale_id', '$$saleId'] },
-                                    { $eq: ['$user_id', userObjectId] }
-                                ]
-                            }
-                        }
-                    },
-                    { $limit: 1 } // Ne trebuie doar existența, nu tot documentul
-                ],
-                as: 'seenCheck'
-            }
-        });
-
-        // STEP 4: Filtru seen/unseen (echivalent cu $nin/$in de dinainte)
-        if (mode === 'new') {
-            // Nevăzute: seenCheck e gol (nu există în seenposts)
-            pipeline.push({ $match: { seenCheck: { $size: 0 } } });
-        } else {
-            // History (văzute): seenCheck are cel puțin un element
-            pipeline.push({ $match: { 'seenCheck.0': { $exists: true } } });
-        }
-
-        // STEP 5: Limit
-        pipeline.push({ $limit: limit });
-
-        // STEP 6: Calculăm hasLiked direct în pipeline
-        // NU mai trimitem array-ul liked_by de 500 obiecte la client
-        pipeline.push({
-            $addFields: {
-                hasLiked: {
-                    $cond: {
-                        if: { $isArray: '$liked_by' },
-                        then: {
-                            $anyElementTrue: {
-                                $map: {
-                                    input: '$liked_by',
-                                    as: 'like',
-                                    in: { $eq: ['$$like.user_id', userObjectId] }
-                                }
-                            }
-                        },
-                        else: false
-                    }
-                }
-            }
-        });
-
-        // STEP 7: Scoatem liked_by și seenCheck din răspuns
-        pipeline.push({
-            $project: {
-                liked_by: 0,
-                seenCheck: 0
-            }
-        });
-
-        // STEP 8: Populate user_id cu username + email (echivalent cu .populate())
-        pipeline.push({
-            $lookup: {
-                from: 'users',
-                localField: 'user_id',
-                foreignField: '_id',
-                pipeline: [
-                    { $project: { username: 1, email: 1 } }
-                ],
-                as: '_user_populated'
-            }
-        });
-
-        pipeline.push({
-            $addFields: {
-                user_id: { $arrayElemAt: ['$_user_populated', 0] }
-            }
-        });
-
-        pipeline.push({ $project: { _user_populated: 0 } });
-
-        pipeline.push({ $match: { user_id: { $ne: null } } });
-
-        // ── EXECUTĂM ──────────────────────────────────────────────────────
-
-        const foundSales = await sales.aggregate(pipeline);
-
-        // Cursor pentru paginare (exact ca înainte)
-        let nextCursor = null;
-        if (foundSales.length > 0) {
-            nextCursor = foundSales[foundSales.length - 1]._id;
-        }
-
-        // Detectare sfârșit posturi noi (exact ca înainte)
-        if (mode === 'new' && foundSales.length === 0) {
             return res.json({
                 success: true,
-                data: [],
-                nextCursor: null,
-                endOfNewPosts: true
+                data: results,
+                nextCursor: results.length > 0 ? results[results.length - 1]._id : null,
+                endOfNewPosts: false
             });
         }
 
-        return res.json({ 
-            success: true, 
-            data: foundSales,
+        // ════════════════════════════════════════════════════════════════
+        //  RAMURA 2 — NEW fără județ preferat  (identic cu varianta curentă)
+        // ════════════════════════════════════════════════════════════════
+        if (!preferredCounty) {
+            const matchStage = { ...baseMatch };
+            // new-fără-județ folosește cursor brut; cursor compus rătăcit → reluăm
+            const newId = (decoded.tier === null) ? decoded.id : null;
+            if (newId) matchStage._id = { $lt: newId };
+
+            const results = await runFeedPage({
+                matchStage, sortDir: -1, seenMode: 'unseen', pageLimit: limit
+            });
+
+            if (results.length === 0) {
+                return res.json({
+                    success: true, data: [], nextCursor: null, endOfNewPosts: true
+                });
+            }
+            return res.json({
+                success: true,
+                data: results,
+                nextCursor: results[results.length - 1]._id,
+                endOfNewPosts: false
+            });
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        //  RAMURA 3 — NEW cu județ preferat  (Tier A → Tier B)
+        // ----------------------------------------------------------------
+        //  Tier A = nevăzute din județul preferat,  _id descrescător.
+        //  Tier B = nevăzute din restul țării,      _id descrescător.
+        //  Servim A, apoi B. Când A se epuizează, completăm pagina din B.
+        // ════════════════════════════════════════════════════════════════
+        let aResults = [];
+        let bResults = [];
+        let inTierB = false; // true din momentul în care A e dovedit epuizat
+
+        if (decoded.tier === 'B') {
+            // Suntem deja în Tier B → sărim complet peste A.
+            inTierB = true;
+            const bMatch = { ...baseMatch, 'location.county': { $ne: preferredCounty } };
+            if (decoded.id) bMatch._id = { $lt: decoded.id };
+            bResults = await runFeedPage({
+                matchStage: bMatch, sortDir: -1, seenMode: 'unseen', pageLimit: limit
+            });
+        } else {
+            // Tier A: decoded.tier === 'A' (cu id) sau null (prima pagină).
+            const aMatch = { ...baseMatch, 'location.county': preferredCounty };
+            if (decoded.id) aMatch._id = { $lt: decoded.id };
+            aResults = await runFeedPage({
+                matchStage: aMatch, sortDir: -1, seenMode: 'unseen', pageLimit: limit
+            });
+
+            if (aResults.length < limit) {
+                // A a întors mai puțin decât limit ⟹ Tier A epuizat (semnal
+                // sigur: filtrul de autor e înainte de $limit). Completăm din B.
+                inTierB = true;
+                const remaining = limit - aResults.length;
+                const bMatch = { ...baseMatch, 'location.county': { $ne: preferredCounty } };
+                // intrăm în B pentru prima dată → fără bound pe _id (B de la început)
+                bResults = await runFeedPage({
+                    matchStage: bMatch, sortDir: -1, seenMode: 'unseen', pageLimit: remaining
+                });
+            }
+        }
+
+        const combined = [...aResults, ...bResults];
+
+        // Ambele tier-uri epuizate → sfârșitul anunțurilor noi.
+        // (endOfNewPosts e true DOAR cu data goală — frontend-ul ignoră `data`
+        //  când endOfNewPosts e true, deci nu trimitem niciodată ambele.)
+        if (combined.length === 0) {
+            return res.json({
+                success: true, data: [], nextCursor: null, endOfNewPosts: true
+            });
+        }
+
+        // Construim cursorul compus pentru pagina următoare.
+        let nextCursor;
+        if (!inTierB) {
+            // Pagină pură Tier A (A a întors exact `limit` → poate mai are).
+            nextCursor = encodeCursor({
+                t: 'A',
+                id: aResults[aResults.length - 1]._id.toString()
+            });
+        } else if (bResults.length > 0) {
+            // Suntem în Tier B și avem elemente → continuăm B de la ultimul.
+            nextCursor = encodeCursor({
+                t: 'B',
+                id: bResults[bResults.length - 1]._id.toString()
+            });
+        } else {
+            // A avea elemente, dar B a întors 0 → pagina următoare e Tier B
+            // de la început (va veni goală → endOfNewPosts pe runda următoare).
+            nextCursor = encodeCursor({ t: 'B' });
+        }
+
+        return res.json({
+            success: true,
+            data: combined,
             nextCursor,
             endOfNewPosts: false
         });
