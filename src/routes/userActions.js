@@ -877,27 +877,25 @@ userActions.post('/api/sales/mark-seen', authUser, fetchLimiter, async (req, res
 });
 
 
-userActions.get('/api/sales/search', authUser, fetchLimiter, async (req, res) => {
+userActions.post('/api/sales/search', authUser, fetchLimiter, async (req, res) => {
     try {
         const {
             brand_id, model_id,
             min_price, max_price,
             min_year, max_year,
             min_km, max_km,
-            fuel_type, body_type, transmission, 
+            fuel_type, body_type, transmission,
             pollution_standard, registration_status,
             county, city, for_dismante,
-            exclude_seen,
             steering_wheel, negotiable,
-            page = 1, limit = 10,
-        } = req.query;
-
-        // ── HELPER-E (neschimbate) ────────────────────────────────────
+            exclude_ids = [],
+            limit = 5,
+        } = req.body;
 
         const safeNum = (val) => {
             if (val === undefined || val === null || val === '') return null;
-            if (Array.isArray(val)) return null; 
-            const cleanVal = String(val).trim(); 
+            if (Array.isArray(val)) return null;
+            const cleanVal = String(val).trim();
             const num = Number(cleanVal);
             return isNaN(num) ? null : num;
         };
@@ -908,7 +906,6 @@ userActions.get('/api/sales/search', authUser, fetchLimiter, async (req, res) =>
             const escaped = cleaned.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             return new RegExp(escaped, 'i');
         };
-        // ── BLOCKED USERS (neschimbat) ────────────────────────────────
 
         const currentUserData = await users.findById(req.user.id).select('blocking blocked_by');
 
@@ -917,9 +914,7 @@ userActions.get('/api/sales/search', authUser, fetchLimiter, async (req, res) =>
             ...(currentUserData.blocked_by || [])
         ];
 
-        // ── CONSTRUIM QUERY-UL DE FILTRE (100% neschimbat) ────────────
-
-        let query = { 
+        let query = {
             is_active: true,
             user_id: { $nin: excludedUserIds }
         };
@@ -928,12 +923,12 @@ userActions.get('/api/sales/search', authUser, fetchLimiter, async (req, res) =>
         const sModel = safeNum(model_id);
         if (sBrand !== null) query['brand.id'] = sBrand;
         if (sModel !== null) query['model.id'] = sModel;
-        
+
         if (fuel_type) query['engine.fuel_type'] = String(fuel_type).trim();
         if (body_type) query.body_type = String(body_type).trim();
         if (transmission) query.transmission = String(transmission).trim();
         if (pollution_standard) query.pollution_standard = String(pollution_standard).trim();
-        if (registration_status) query.registration_status = registration_status.trim();
+        if (registration_status) query.registration_status = String(registration_status).trim();
         if (county) query['location.county'] = safeRegex(county);
         if (city) query['location.city'] = safeRegex(city);
 
@@ -973,56 +968,24 @@ userActions.get('/api/sales/search', authUser, fetchLimiter, async (req, res) =>
             if (maxK !== null) query.mileage.$lte = maxK;
         }
 
-        const safePage = Math.max(1, safeNum(page) || 1);
-        const safeLimit = Math.max(1, safeNum(limit) || 10);
-        const skip = (safePage - 1) * safeLimit;
+        const excludeObjectIds = (Array.isArray(exclude_ids) ? exclude_ids : [])
+            .filter(id => mongoose.Types.ObjectId.isValid(id))
+            .map(id => new mongoose.Types.ObjectId(id));
 
-        // ══════════════════════════════════════════════════════════════
-        // AICI ÎNCEPE PARTEA NOUĂ — AGGREGATION PIPELINE
-        // (Blocul vechi cu SeenPost.find() + $nin a fost înlocuit)
-        // ══════════════════════════════════════════════════════════════
+        if (excludeObjectIds.length > 0) {
+            query._id = { ...(query._id || {}), $nin: excludeObjectIds };
+        }
 
+        const safeLimit = Math.max(1, safeNum(limit) || 5);
         const userObjectId = new mongoose.Types.ObjectId(req.user.id);
         const pipeline = [];
 
-        // STEP 1: Match cu toate filtrele (exact aceleași filtre ca înainte)
         pipeline.push({ $match: query });
 
-        // STEP 2: Sortare (neschimbată)
         pipeline.push({ $sort: { likes_count: -1, _id: -1 } });
 
-        // STEP 3: Dacă exclude_seen e activ, filtrăm cu $lookup în loc de $nin
-        if (exclude_seen === 'true') {
-            pipeline.push({
-                $lookup: {
-                    from: 'seenposts',
-                    let: { saleId: '$_id' },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $and: [
-                                        { $eq: ['$sale_id', '$$saleId'] },
-                                        { $eq: ['$user_id', userObjectId] }
-                                    ]
-                                }
-                            }
-                        },
-                        { $limit: 1 }
-                    ],
-                    as: 'seenCheck'
-                }
-            });
-
-            // Păstrăm doar posturile NEVĂZUTE
-            pipeline.push({ $match: { seenCheck: { $size: 0 } } });
-        }
-
-        // STEP 4: Paginare (neschimbată)
-        pipeline.push({ $skip: skip });
         pipeline.push({ $limit: safeLimit });
 
-        // STEP 5: Calculăm hasLiked direct în pipeline
         pipeline.push({
             $addFields: {
                 hasLiked: {
@@ -1043,14 +1006,8 @@ userActions.get('/api/sales/search', authUser, fetchLimiter, async (req, res) =>
             }
         });
 
-        // STEP 6: Scoatem liked_by și seenCheck din răspuns
-        const projectOut = { liked_by: 0 };
-        if (exclude_seen === 'true') {
-            projectOut.seenCheck = 0;
-        }
-        pipeline.push({ $project: projectOut });
+        pipeline.push({ $project: { liked_by: 0 } });
 
-        // STEP 7: Populate user_id cu username + email
         pipeline.push({
             $lookup: {
                 from: 'users',
@@ -1073,15 +1030,11 @@ userActions.get('/api/sales/search', authUser, fetchLimiter, async (req, res) =>
 
         pipeline.push({ $match: { user_id: { $ne: null } } });
 
-        // ── EXECUTĂM ──────────────────────────────────────────────────
-
         const results = await sales.aggregate(pipeline);
 
-        // Răspuns (structură identică cu înainte)
         return res.json({
             success: true,
             data: results,
-            page: safePage,
             count: results.length
         });
 
