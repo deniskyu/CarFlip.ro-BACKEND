@@ -8,9 +8,7 @@ const saleSchema = new mongoose.Schema({
     },
     user_name: { type: String },
     user_image: { type: String },
-    
     title: { type: String, required: true, maxlength: 35 },
-
     brand: {
         id: { type: Number, required: true },
         name: { type: String, required: true }
@@ -23,54 +21,46 @@ const saleSchema = new mongoose.Schema({
         capacity: { type: String, required: true },
         fuel_type: { type: String, required: true }
     },
-
     price: { type: Number, required: true },
     negotiable: { type: Boolean, default: false },
     mileage: { type: Number, required: true },
     production_year: { type: Number, required: true },
     vin: { type: String },
-
     body_type: { type: String, required: true },
     color: { type: String, required: true },
     transmission: { type: String, required: true },
     drivetrain: { type: String, required: true },
     pollution_standard: { type: String, required: true },
     steering_wheel: { type: String, enum: ['left', 'right'], default: 'left' },
-
     location: {
         county: { type: String, required: true },
         city: { type: String, required: true },
     },
-
     registration_status: { type: String, required: true },
     exchange_accepted: { type: Boolean, default: false },
     for_dismante: { type: Boolean, default: false },
-
     phone_number: { type: String, required: true },
     description: { type: String, default: "" },
-
     media: [
         {
             url: { type: String, required: true },
             type: { type: String, enum: ['image', 'video'], default: 'image' },
             public_id: { type: String },
-            zoom_level: { type: Number, default: 1 }
+            zoom_level: { type: Number, default: 1 },
+            width: { type: Number },
+            height: { type: Number }
         }
     ],
-
     likes_count: { type: Number, default: 0 },
     liked_by: [{ 
         user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'users' },
         liked_at: { type: Date, default: Date.now }
     }],
-    
     allow_comments: { type: Boolean, default: true },
     comments_count: { type: Number, default: 0 },
-
     is_active: { type: Boolean, default: false },
     is_promoted: { type: Boolean, default: false },
     views: { type: Number, default: 0 },
-
     status: { 
         type: String, 
         enum: ['pending_payment', 'active', 'grace_period', 'media_processing', 'failed_media'], 
@@ -79,7 +69,6 @@ const saleSchema = new mongoose.Schema({
     paid_until: { type: Date },
     expires_at: { type: Date },
     stripe_subscription_id: { type: String, default: null }
-
 }, { 
     timestamps: true,
     collection: 'sales' 
@@ -101,5 +90,4 @@ saleSchema.index({ is_active: 1, likes_count: -1, _id: -1 }); // ← pentru sear
 saleSchema.index({ is_active: 1, "location.county": 1, _id: -1 }); // ← pentru Tier A (feed pe județ)
 
 const sales = mongoose.models.sales || mongoose.model("sales", saleSchema);
-
 export default sales;

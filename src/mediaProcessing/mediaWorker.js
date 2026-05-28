@@ -54,6 +54,27 @@ const processVideo = (inputPath, outputPath) => {
     });
 };
 
+// ─── NOU: Citește dimensiunile width/height ale unui video procesat ──────────
+// Rulează pe fișierul OUTPUT (post-ffmpeg), unde rotația e deja aplicată
+// fizic și metadata curățată → dimensiunile sunt exact ce va afișa orice
+// player, fără ambiguități de orientare.
+// Defensive: orice eșec returnează null, NU aruncă — apelantul decide ce face.
+const probeVideoDimensions = async (filePath) => {
+    try {
+        const probeData = await new Promise((resolve, reject) => {
+            ffmpeg.ffprobe(filePath, (err, data) => err ? reject(err) : resolve(data));
+        });
+        const videoStream = probeData.streams.find(s => s.codec_type === 'video');
+        if (videoStream && videoStream.width && videoStream.height) {
+            return { width: videoStream.width, height: videoStream.height };
+        }
+        return null;
+    } catch (err) {
+        console.warn(`⚠️ Nu am putut citi dimensiunile video pentru ${filePath}:`, err.message);
+        return null;
+    }
+};
+
 export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
     const { saleId, files, metadata = [], isMediaUpdate = false, oldPublicIds = [] } = job.data; 
     const finalMediaUrls = [];
@@ -123,12 +144,23 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
 
                 const currentZoom = metadata[index]?.zoom_level || 1;
 
-                finalMediaUrls.push({
+                const mediaEntry = {
                     url: `${process.env.R2_PUBLIC_DOMAIN}/${processedFileName}`,
                     type: isVideo ? 'video' : 'image',
                     public_id: processedFileName,
                     zoom_level: currentZoom
-                });
+                };
+
+                // ─── NOU: Pentru video, atașăm dimensiunile fișierului procesat ──
+                if (isVideo) {
+                    const videoDimensions = await probeVideoDimensions(processedFilePath);
+                    if (videoDimensions) {
+                        mediaEntry.width = videoDimensions.width;
+                        mediaEntry.height = videoDimensions.height;
+                    }
+                }
+
+                finalMediaUrls.push(mediaEntry);
             }
 
             // ── SUCCES: Swap atomic în DB — fără să atingem status sau is_active ──
@@ -250,12 +282,23 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
 
             const currentZoom = metadata[index]?.zoom_level || 1;
 
-            finalMediaUrls.push({
+            const mediaEntry = {
                 url: `${process.env.R2_PUBLIC_DOMAIN}/${processedFileName}`,
                 type: isVideo ? 'video' : 'image',
                 public_id: processedFileName, 
                 zoom_level: currentZoom
-            });
+            };
+
+            // ─── NOU: Pentru video, atașăm dimensiunile fișierului procesat ──
+            if (isVideo) {
+                const videoDimensions = await probeVideoDimensions(processedFilePath);
+                if (videoDimensions) {
+                    mediaEntry.width = videoDimensions.width;
+                    mediaEntry.height = videoDimensions.height;
+                }
+            }
+
+            finalMediaUrls.push(mediaEntry);
         }
 
         // Update atomic în DB
