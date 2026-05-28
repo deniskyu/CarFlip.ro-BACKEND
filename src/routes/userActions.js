@@ -891,8 +891,6 @@ userActions.post('/api/sales/search', authUser, fetchLimiter, async (req, res) =
             exclude_ids = [],
             limit = 5,
         } = req.body;
-        
-        console.log("🔍 SEARCH BODY:", JSON.stringify(req.body));
 
         const safeNum = (val) => {
             if (val === undefined || val === null || val === '') return null;
@@ -1032,11 +1030,7 @@ userActions.post('/api/sales/search', authUser, fetchLimiter, async (req, res) =
 
         pipeline.push({ $match: { user_id: { $ne: null } } });
 
-        console.log("🔍 SEARCH QUERY:", JSON.stringify(query));
-
         const results = await sales.aggregate(pipeline);
-
-        console.log("🔍 SEARCH COUNT:", results.length);
 
         return res.json({
             success: true,
