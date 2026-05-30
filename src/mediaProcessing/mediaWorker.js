@@ -60,14 +60,17 @@ const processVideo = (inputPath, outputPath) => {
 // player, fără ambiguități de orientare.
 // Defensive: orice eșec returnează null, NU aruncă — apelantul decide ce face.
 const probeVideoDimensions = async (filePath) => {
+    console.log(`🔍 probeVideoDimensions: pornire pe ${filePath}`);
     try {
         const probeData = await new Promise((resolve, reject) => {
             ffmpeg.ffprobe(filePath, (err, data) => err ? reject(err) : resolve(data));
         });
         const videoStream = probeData.streams.find(s => s.codec_type === 'video');
+        console.log(`🔍 probeVideoDimensions: videoStream găsit?`, !!videoStream, 'w=', videoStream?.width, 'h=', videoStream?.height);
         if (videoStream && videoStream.width && videoStream.height) {
             return { width: videoStream.width, height: videoStream.height };
         }
+        console.log(`🔍 probeVideoDimensions: returnez null (videoStream incomplet)`);
         return null;
     } catch (err) {
         console.warn(`⚠️ Nu am putut citi dimensiunile video pentru ${filePath}:`, err.message);
@@ -162,6 +165,8 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
 
                 finalMediaUrls.push(mediaEntry);
             }
+
+            console.log('🔍 finalMediaUrls înainte de DB write:', JSON.stringify(finalMediaUrls, null, 2));
 
             // ── SUCCES: Swap atomic în DB — fără să atingem status sau is_active ──
             await sales.findByIdAndUpdate(
