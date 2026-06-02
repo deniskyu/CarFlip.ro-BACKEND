@@ -158,11 +158,11 @@ const startCronJobs = () => {
     // Curăță conversațiile rămase fără niciun mesaj (orfane după TTL MongoDB)
     cron.schedule('50 3 * * *', async () => {
         try {
-            // ─── Curățare imagini chat din R2 ────────────────────────────────────
-            const fourHoursFromNow = new Date(Date.now() + 4 * 60 * 60 * 1000);
+        // ─── Curățare imagini chat din R2 ────────────────────────────────────
+            const now = new Date();
             const expiredImages = await Message.find({
                 type: 'image',
-                expires_at: { $lte: fourHoursFromNow },
+                expires_at: { $lte: now },
                 image_public_id: { $ne: null }
             }).select('image_public_id').lean();
     
@@ -178,6 +178,9 @@ const startCronJobs = () => {
                 }
                 console.log(`✅ Imagini chat expirate șterse din R2: ${expiredImages.length}`);
             }
+    
+            const deletedMessages = await Message.deleteMany({ expires_at: { $lte: now } });
+            console.log(`✅ Mesaje expirate șterse din DB: ${deletedMessages.deletedCount}`);
             // ─────────────────────────────────────────────────────────────────────
     
             const allConversations = await Conversation.find({}).select('_id').lean();

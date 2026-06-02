@@ -48,7 +48,7 @@ const messageSchema = new mongoose.Schema({
 
 // TTL index — MongoDB rulează un job intern la fiecare 60 secunde
 // și șterge automat documentele unde expires_at a trecut
-messageSchema.index({ expires_at: 1 }, { expireAfterSeconds: 0 });
+messageSchema.index({ expires_at: 1 });
 
 // Indexuri pentru performanță
 messageSchema.index({ conversation_id: 1, createdAt: -1 });
