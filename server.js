@@ -20,6 +20,9 @@ dotenv.config();
 const app = express();
 const httpServer = createServer(app)
 
+httpServer.keepAliveTimeout = 65000;
+httpServer.headersTimeout = 66000;
+
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
