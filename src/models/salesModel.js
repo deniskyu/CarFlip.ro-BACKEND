@@ -26,6 +26,7 @@ const saleSchema = new mongoose.Schema({
     mileage: { type: Number, required: true },
     production_year: { type: Number, required: true },
     vin: { type: String },
+    horsepower: { type: Number },
     body_type: { type: String, required: true },
     color: { type: String, required: true },
     transmission: { type: String, required: true },

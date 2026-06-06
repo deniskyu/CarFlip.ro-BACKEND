@@ -72,7 +72,7 @@ const sanitize = (text) => {
 userActions.post('/api/sale/post/free',
     authUser,
     fetchLimiter,
-    upload.array('mediaFiles', 10),
+    upload.array('mediaFiles', 13),
     async (req, res) => {
         try {
             let {
@@ -82,7 +82,7 @@ userActions.post('/api/sale/post/free',
                 registration_status, exchange_accepted, for_dismante,
                 phone_number, description,
                 vin, steering_wheel, negotiable, allow_comments,
-                media_metadata, title
+                media_metadata, title, horsepower
             } = req.body;
 
             // ── Parsare metadata zoom ─────────────────────────────────
@@ -196,6 +196,11 @@ userActions.post('/api/sale/post/free',
                 expires_at: expiresAt,
                 stripe_subscription_id: null
             });
+
+            const parsedHorsepower = parseInt(horsepower, 10);
+            if (!isNaN(parsedHorsepower) && parsedHorsepower > 0) {
+                newSale.horsepower = parsedHorsepower;
+            }
 
             await newSale.save();
 
@@ -1994,6 +1999,7 @@ userActions.put('/api/sales/edit/:id', authUser, fetchLimiter, async (req, res) 
             for_dismante,
             allow_comments,
             engine_capacity, // 🔥 AICI E NOU
+            horsepower,
             media, // <-- Îl vom procesa special, nu îl băgăm direct!
             title
         } = req.body;
@@ -2073,6 +2079,11 @@ userActions.put('/api/sales/edit/:id', authUser, fetchLimiter, async (req, res) 
             sale.engine.capacity = sanitize(engine_capacity);
         }
 
+        if (horsepower !== undefined) {
+            const parsedHorsepower = parseInt(horsepower, 10);
+            sale.horsepower = (!isNaN(parsedHorsepower) && parsedHorsepower > 0) ? parsedHorsepower : undefined;
+        }
+
         if (description !== undefined) sale.description = sanitize(description);
         if (phone_number !== undefined) sale.phone_number = sanitize(phone_number);
         if (registration_status !== undefined) sale.registration_status = sanitize(registration_status);
@@ -2100,7 +2111,7 @@ userActions.put('/api/sales/edit/:id', authUser, fetchLimiter, async (req, res) 
 userActions.put('/api/sales/edit-with-media/:id',
     authUser,
     fetchLimiter,
-    upload.array('mediaFiles', 10),
+    upload.array('mediaFiles', 13),
     async (req, res) => {
         try {
             const { id } = req.params;
@@ -2109,6 +2120,7 @@ userActions.put('/api/sales/edit-with-media/:id',
             // 1. ZIDUL DE SECURITATE: Extragem STRICT câmpurile permise
             const {
                 engine_capacity,
+                horsepower,
                 price,
                 mileage,
                 vin,
@@ -2156,6 +2168,7 @@ userActions.put('/api/sales/edit-with-media/:id',
             }
 
             let videoCount = 0;
+            let imageCount = 0;
             const MAX_IMAGE_SIZE = 15 * 1024 * 1024;
             const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
 
@@ -2172,10 +2185,15 @@ userActions.put('/api/sales/edit-with-media/:id',
                         return res.status(400).json({ success: false, message: "Un fișier video depășește limita de 50MB." });
                     }
                 } else if (isImage) {
+                    imageCount++;
                     if (file.size > MAX_IMAGE_SIZE) {
                         return res.status(400).json({ success: false, message: "O imagine depășește limita de 15MB." });
                     }
                 }
+            }
+
+            if (imageCount === 0) {
+                return res.status(400).json({ success: false, message: "Este necesară cel puțin o imagine (videoclipurile sunt opționale)." });
             }
 
             // 4. Parsăm metadatele
@@ -2230,6 +2248,11 @@ userActions.put('/api/sales/edit-with-media/:id',
                 sale.engine.capacity = sanitize(engine_capacity);
             }
 
+            if (horsepower !== undefined) {
+                const parsedHorsepower = parseInt(horsepower, 10);
+                sale.horsepower = (!isNaN(parsedHorsepower) && parsedHorsepower > 0) ? parsedHorsepower : undefined;
+            }
+
             if (description !== undefined) sale.description = sanitize(description);
             if (phone_number !== undefined) sale.phone_number = sanitize(phone_number);
             if (registration_status !== undefined) sale.registration_status = sanitize(registration_status);
@@ -2255,6 +2278,7 @@ userActions.put('/api/sales/edit-with-media/:id',
         }
     }
 );
+
 
 
 userActions.get('/', (req, res) => {
@@ -2882,80 +2906,80 @@ userActions.get('/info/stergere-cont', fetchLimiter, (req, res) => {
     `);
 });
 
-userActions.get('/api/sales/public-feed', fetchLimiter, async (req, res) => {
-    try {
-        const limit = parseInt(req.query.limit) || 10;
-        const cursor = req.query.cursor;
-        const mode = req.query.mode || 'new';
+    userActions.get('/api/sales/public-feed', fetchLimiter, async (req, res) => {
+        try {
+            const limit = parseInt(req.query.limit) || 10;
+            const cursor = req.query.cursor;
+            const mode = req.query.mode || 'new';
 
-        const pipeline = [];
+            const pipeline = [];
 
-        const baseMatch = { is_active: true };
+            const baseMatch = { is_active: true };
 
-        if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
-            baseMatch._id = { $lt: new mongoose.Types.ObjectId(cursor) };
-        }
-
-        pipeline.push({ $match: baseMatch });
-        pipeline.push({ $sort: { _id: -1 } });
-        pipeline.push({ $limit: limit });
-
-        pipeline.push({
-            $project: {
-                liked_by: 0
+            if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
+                baseMatch._id = { $lt: new mongoose.Types.ObjectId(cursor) };
             }
-        });
 
-        pipeline.push({
-            $lookup: {
-                from: 'users',
-                localField: 'user_id',
-                foreignField: '_id',
-                pipeline: [
-                    { $project: { username: 1, email: 1 } }
-                ],
-                as: '_user_populated'
+            pipeline.push({ $match: baseMatch });
+            pipeline.push({ $sort: { _id: -1 } });
+            pipeline.push({ $limit: limit });
+
+            pipeline.push({
+                $project: {
+                    liked_by: 0
+                }
+            });
+
+            pipeline.push({
+                $lookup: {
+                    from: 'users',
+                    localField: 'user_id',
+                    foreignField: '_id',
+                    pipeline: [
+                        { $project: { username: 1, email: 1 } }
+                    ],
+                    as: '_user_populated'
+                }
+            });
+
+            pipeline.push({
+                $addFields: {
+                    user_id: { $arrayElemAt: ['$_user_populated', 0] },
+                    hasLiked: false
+                }
+            });
+
+            pipeline.push({ $project: { _user_populated: 0 } });
+            pipeline.push({ $match: { user_id: { $ne: null } } });
+
+            const foundSales = await sales.aggregate(pipeline);
+
+            let nextCursor = null;
+            if (foundSales.length > 0) {
+                nextCursor = foundSales[foundSales.length - 1]._id;
             }
-        });
 
-        pipeline.push({
-            $addFields: {
-                user_id: { $arrayElemAt: ['$_user_populated', 0] },
-                hasLiked: false
+            if (mode === 'new' && foundSales.length === 0) {
+                return res.json({
+                    success: true,
+                    data: [],
+                    nextCursor: null,
+                    endOfNewPosts: true
+                });
             }
-        });
 
-        pipeline.push({ $project: { _user_populated: 0 } });
-        pipeline.push({ $match: { user_id: { $ne: null } } });
-
-        const foundSales = await sales.aggregate(pipeline);
-
-        let nextCursor = null;
-        if (foundSales.length > 0) {
-            nextCursor = foundSales[foundSales.length - 1]._id;
-        }
-
-        if (mode === 'new' && foundSales.length === 0) {
             return res.json({
                 success: true,
-                data: [],
-                nextCursor: null,
-                endOfNewPosts: true
+                data: foundSales,
+                nextCursor,
+                endOfNewPosts: false
             });
+
+        } catch (error) {
+            console.error("Public Feed Error:", error);
+            return res.status(500).json({ success: false, message: "Eroare la încărcarea feed-ului." });
         }
-
-        return res.json({
-            success: true,
-            data: foundSales,
-            nextCursor,
-            endOfNewPosts: false
-        });
-
-    } catch (error) {
-        console.error("Public Feed Error:", error);
-        return res.status(500).json({ success: false, message: "Eroare la încărcarea feed-ului." });
-    }
-});
+    });
 
 
 userActions.get('/api/sales/search-list', authUser, fetchLimiter, async (req, res) => {

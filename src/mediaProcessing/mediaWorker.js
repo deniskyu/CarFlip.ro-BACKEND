@@ -116,8 +116,8 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                         ffmpeg.ffprobe(file.path, (err, data) => err ? reject(err) : resolve(data));
                     });
 
-                    if (probeData.format.duration > 30) {
-                        throw new Error(`VIDEO_TOO_LONG: ${file.originalname} (${Math.round(probeData.format.duration)}s). Maxim 25s permis.`);
+                    if (probeData.format.duration > 45) {
+                        throw new Error(`VIDEO_TOO_LONG: ${file.originalname} (${Math.round(probeData.format.duration)}s). Maxim 45s permis.`);
                     }
 
                     await processVideo(file.path, processedFilePath);
@@ -262,8 +262,8 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                     ffmpeg.ffprobe(file.path, (err, data) => err ? reject(err) : resolve(data));
                 });
                 
-                if (probeData.format.duration > 30) {
-                    throw new Error(`VIDEO_TOO_LONG: ${file.originalname} (${Math.round(probeData.format.duration)}s). Maxim 25s permis.`);
+                if (probeData.format.duration > 45) {
+                    throw new Error(`VIDEO_TOO_LONG: ${file.originalname} (${Math.round(probeData.format.duration)}s). Maxim 45s permis.`);
                 }
 
                 await processVideo(file.path, processedFilePath);
