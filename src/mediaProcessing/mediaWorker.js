@@ -122,10 +122,7 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
 
                     await processVideo(file.path, processedFilePath);
                 } else {
-                    let img = sharp(file.path);
-                    if (!metadata[index]?.oriented) {
-                        img = img.rotate();
-                    }
+                    let img = sharp(file.path).rotate();
                     sharpInfo = await img
                         .resize({ 
                             width: 1440, 
@@ -272,10 +269,7 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                 // .rotate()              → citește EXIF, rotește fizic pixelii, corect pe iOS și Android
                 // .resize fit:'inside'   → păstrează aspect ratio exact (4:3 rămâne 4:3, 16:9 rămâne 16:9)
                 // fără .withMetadata()   → șterge tot EXIF-ul, inclusiv orientarea (nu mai e nevoie, e rotit fizic)
-                let img = sharp(file.path);
-                if (!metadata[index]?.oriented) {
-                    img = img.rotate();
-                }
+                let img = sharp(file.path).rotate();
                 sharpInfo = await img
                     .resize({ 
                         width: 1440, 
