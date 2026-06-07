@@ -2038,11 +2038,15 @@ userActions.put('/api/sales/edit/:id', authUser, fetchLimiter, async (req, res) 
                 const incomingItem = media.find(m => m.public_id === existingItem.public_id || m.url === existingItem.url);
                 
                 // Dacă o găsim și are zoom-ul modificat, aplicăm DOAR zoom-ul.
-                if (incomingItem && incomingItem.zoom_level !== undefined) {
-                    return {
-                        ...existingItem.toObject(), // Păstrăm URL-ul și tipul original intacte
-                        zoom_level: Number(incomingItem.zoom_level) || 1
-                    };
+                if (incomingItem) {
+                    const updated = { ...existingItem.toObject() };
+                    if (incomingItem.zoom_level !== undefined) {
+                        updated.zoom_level = Number(incomingItem.zoom_level) || 1;
+                    }
+                    if (typeof incomingItem.cover_fraction === 'number' && Number.isFinite(incomingItem.cover_fraction)) {
+                        updated.cover_fraction = incomingItem.cover_fraction;
+                    }
+                    return updated;
                 }
                 return existingItem;
             });

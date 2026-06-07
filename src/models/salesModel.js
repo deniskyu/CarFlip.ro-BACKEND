@@ -49,7 +49,8 @@ const saleSchema = new mongoose.Schema({
             public_id: { type: String },
             zoom_level: { type: Number, default: 1 },
             width: { type: Number },
-            height: { type: Number }
+            height: { type: Number },
+            cover_fraction: { type: Number }
         }
     ],
     likes_count: { type: Number, default: 0 },

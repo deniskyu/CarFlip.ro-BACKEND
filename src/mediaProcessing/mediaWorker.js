@@ -150,6 +150,7 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                 } catch (e) {}
 
                 const currentZoom = metadata[index]?.zoom_level || 1;
+                const currentCoverFraction = metadata[index]?.cover_fraction;
 
                 const mediaEntry = {
                     url: `${process.env.R2_PUBLIC_DOMAIN}/${processedFileName}`,
@@ -157,6 +158,10 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                     public_id: processedFileName,
                     zoom_level: currentZoom
                 };
+
+                if (typeof currentCoverFraction === 'number' && Number.isFinite(currentCoverFraction)) {
+                    mediaEntry.cover_fraction = currentCoverFraction;
+                }
 
                 // ─── NOU: Pentru video, atașăm dimensiunile fișierului procesat ──
                 if (isVideo) {
@@ -297,6 +302,7 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
             } catch (e) {}
 
             const currentZoom = metadata[index]?.zoom_level || 1;
+            const currentCoverFraction = metadata[index]?.cover_fraction;
 
             const mediaEntry = {
                 url: `${process.env.R2_PUBLIC_DOMAIN}/${processedFileName}`,
@@ -304,6 +310,10 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                 public_id: processedFileName, 
                 zoom_level: currentZoom
             };
+
+            if (typeof currentCoverFraction === 'number' && Number.isFinite(currentCoverFraction)) {
+                mediaEntry.cover_fraction = currentCoverFraction;
+            }
 
             // ─── NOU: Pentru video, atașăm dimensiunile fișierului procesat ──
             if (isVideo) {
