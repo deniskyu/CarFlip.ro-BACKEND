@@ -67,6 +67,24 @@ async function deleteFromR2(publicUrl) {
         console.error(`Eroare ștergere R2 (${publicUrl}):`, error);
     }
 }
+
+
+const DEFAULT_AVATAR = "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
+
+const uploadAvatar = (req, res, next) => {
+    upload.single('avatar')(req, res, (err) => {
+        if (err) {
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(400).json({ success: false, message: "Imaginea este prea mare. Limita este de 10MB." });
+            }
+            return res.status(400).json({ success: false, message: err.message || "Fișier invalid." });
+        }
+        next();
+    });
+};
+
+
+
 const sanitize = (text) => text ? String(text).trim() : "";
 // -----------------------------------------------
 
@@ -236,30 +254,57 @@ userProfiles.put('/api/user/profile', authUser, fetchLimiter, async (req, res) =
 });
 
 // --- 3. POST: Upload Avatar Nou ---
-userProfiles.post('/api/user/avatar', authUser, upload.single('avatar'), fetchLimiter, async (req, res) => {
+userProfiles.post('/api/user/avatar', authUser, fetchLimiter, uploadAvatar, async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ success: false, message: "Lipsește imaginea." });
 
         const currentUser = await users.findById(req.user.id);
+        if (!currentUser) return res.status(404).json({ success: false, message: "Utilizator negăsit." });
 
-        // Șterge vechea imagine
-        await deleteFromR2(currentUser.icon);
-
-        // Urcă noua imagine
+        const oldIcon = currentUser.icon;
         const newPublicUrl = await uploadToR2(req.file);
 
-        // Salvează în DB
         currentUser.icon = newPublicUrl;
         await currentUser.save();
-        
+
         await sales.updateMany(
             { user_id: req.user.id },
             { $set: { user_image: newPublicUrl } }
         );
 
+        deleteFromR2(oldIcon);
+
         res.json({ success: true, newUrl: newPublicUrl, message: 'Avatar schimbat.' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Eroare la upload.' });
+    }
+});
+
+userProfiles.delete('/api/user/avatar', authUser, fetchLimiter, async (req, res) => {
+    try {
+        const currentUser = await users.findById(req.user.id);
+        if (!currentUser) return res.status(404).json({ success: false, message: "Utilizator negăsit." });
+
+        const oldIcon = currentUser.icon;
+
+        if (oldIcon === DEFAULT_AVATAR) {
+            return res.json({ success: true, newUrl: DEFAULT_AVATAR, message: 'Poza este deja cea implicită.' });
+        }
+
+        currentUser.icon = DEFAULT_AVATAR;
+        await currentUser.save();
+
+        await sales.updateMany(
+            { user_id: req.user.id },
+            { $set: { user_image: DEFAULT_AVATAR } }
+        );
+
+        deleteFromR2(oldIcon);
+
+        return res.json({ success: true, newUrl: DEFAULT_AVATAR, message: 'Poză ștearsă.' });
+    } catch (error) {
+        console.error("Delete Avatar Error:", error);
+        return res.status(500).json({ success: false, message: 'Eroare la ștergerea pozei.' });
     }
 });
 
