@@ -7,5 +7,8 @@
                 "paths": ["/post/*", "/profile/*"]
             }
         ]
+    },
+    "webcredentials": {
+        "apps": ["4F3M46392M.ro.carflip.app"]
     }
 }
