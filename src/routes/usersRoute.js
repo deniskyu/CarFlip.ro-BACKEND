@@ -209,9 +209,9 @@ userRoute.post('/api/user/register',
 
 // --- 2. VERIFY OTP (ACTIVEAZĂ CONTUL) ---
 userRoute.post('/api/user/verify-otp',
-    loginLimiter, // Foarte important: previne brute-forcing-ul codului de 6 cifre
+    loginLimiter,
     async (req, res) => {
-        const { email, otp } = req.body;
+        const { email, otp, fcmToken } = req.body; // ← primim și fcmToken
 
         if (!email || !otp) {
             return res.json({ success: false, message: "Emailul și codul sunt obligatorii." });
@@ -220,35 +220,53 @@ userRoute.post('/api/user/verify-otp',
         try {
             const user = await users.findOne({ email: email.trim().toLowerCase() });
 
-            // Dacă userul nu există
             if (!user) {
                 return res.json({ success: false, message: "Utilizatorul nu a fost găsit." });
             }
-
-            // Dacă este deja verificat
             if (user.isVerified) {
                 return res.json({ success: false, message: "Contul este deja activ. Te poți loga." });
             }
-
-            // Dacă codul a expirat
             if (!user.verificationExpires || user.verificationExpires < Date.now()) {
                 return res.json({ success: false, message: "Codul a expirat. Te rugăm să te înregistrezi din nou pentru a primi alt cod." });
             }
 
-            // Verificăm dacă codul corespunde (folosim compareString pt că e hash-uit)
             const isMatch = await compareString(otp.toString(), user.verificationCode);
-
             if (!isMatch) {
                 return res.json({ success: false, message: "Codul introdus este incorect." });
             }
 
-            // Succes! Activăm contul și ștergem datele temporare de OTP
+            // --- Activăm contul ---
             user.isVerified = true;
             user.verificationCode = undefined;
             user.verificationExpires = undefined;
-            await user.save();
 
-            return res.json({ success: true, message: "Contul a fost activat cu succes! Te poți loga acum." });
+            // --- Generăm tokenii, exact ca la login ---
+            const newAccessToken = jwt.sign(
+                { id: user._id, email: user.email },
+                process.env.JWT_SECRET,
+                { expiresIn: "20m" }
+            );
+            const newRefreshToken = jwt.sign(
+                { id: user._id },
+                process.env.JWT_REFRESH_SECRET,
+                { expiresIn: "120d" }
+            );
+
+            // --- Creăm sesiunea (păstrăm ultimele 5) ---
+            user.refreshTokens.push({ token: newRefreshToken, fcmToken: fcmToken || null });
+            if (user.refreshTokens.length > 5) {
+                user.refreshTokens = user.refreshTokens.slice(-5);
+            }
+
+            await user.save(); // un singur save: activare + sesiune
+
+            return res.json({
+                success: true,
+                message: "Contul a fost activat cu succes!",
+                newAccessToken,
+                newRefreshToken,
+                username: user.username
+            });
 
         } catch (er) {
             console.error("Verify OTP Error:", er);
@@ -256,8 +274,6 @@ userRoute.post('/api/user/verify-otp',
         }
     }
 );
-
-
 
 
 // --- LOGIN (UPDATED FOR MULTI-DEVICE) ---
