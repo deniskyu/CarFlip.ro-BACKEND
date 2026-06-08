@@ -30,6 +30,12 @@ const s3 = new S3Client({
     }
 });
 
+// ─── Prag de „înălțime" (height/width) peste care o imagine primește cover
+//     automat (cover_fraction = 1). TREBUIE să rămână identic cu pragul folosit
+//     în preview (PreviewItem.jsx → defaultFraction). Folosit DOAR ca fallback,
+//     când clientul nu a trimis un cover_fraction (ex: slide nemontat în preview).
+const COVER_TALLNESS_THRESHOLD = 1.34;
+
 const processVideo = (inputPath, outputPath) => {
     return new Promise((resolve, reject) => {
         ffmpeg(inputPath)
@@ -159,11 +165,8 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                     zoom_level: currentZoom
                 };
 
-                if (typeof currentCoverFraction === 'number' && Number.isFinite(currentCoverFraction)) {
-                    mediaEntry.cover_fraction = currentCoverFraction;
-                }
-
-                // ─── NOU: Pentru video, atașăm dimensiunile fișierului procesat ──
+                // ─── 1. Întâi atașăm dimensiunile fișierului PROCESAT (orientat fizic) ──
+                //    Sunt exact dimensiunile pe care le va afișa feed-ul.
                 if (isVideo) {
                     const videoDimensions = await probeVideoDimensions(processedFilePath);
                     if (videoDimensions) {
@@ -175,6 +178,18 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                         mediaEntry.width = sharpInfo.width;
                         mediaEntry.height = sharpInfo.height;
                     }
+                }
+
+                // ─── 2. cover_fraction ────────────────────────────────────────
+                //    - trimis de client (auto din preview SAU slider) → îl respectăm;
+                //    - lipsă (slide nemontat în preview) → îl calculăm AICI din
+                //      dimensiunile reale, identic cu logica din preview.
+                //    Doar pentru imagini — video-ul nu folosește cover_fraction în feed.
+                if (typeof currentCoverFraction === 'number' && Number.isFinite(currentCoverFraction)) {
+                    mediaEntry.cover_fraction = currentCoverFraction;
+                } else if (!isVideo && mediaEntry.width > 0 && mediaEntry.height > 0) {
+                    const tallness = mediaEntry.height / mediaEntry.width;
+                    mediaEntry.cover_fraction = tallness >= COVER_TALLNESS_THRESHOLD ? 1 : 0;
                 }
 
                 finalMediaUrls.push(mediaEntry);
@@ -311,11 +326,8 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                 zoom_level: currentZoom
             };
 
-            if (typeof currentCoverFraction === 'number' && Number.isFinite(currentCoverFraction)) {
-                mediaEntry.cover_fraction = currentCoverFraction;
-            }
-
-            // ─── NOU: Pentru video, atașăm dimensiunile fișierului procesat ──
+            // ─── 1. Întâi atașăm dimensiunile fișierului PROCESAT (orientat fizic) ──
+            //    Sunt exact dimensiunile pe care le va afișa feed-ul.
             if (isVideo) {
                 const videoDimensions = await probeVideoDimensions(processedFilePath);
                 if (videoDimensions) {
@@ -327,6 +339,18 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                     mediaEntry.width = sharpInfo.width;
                     mediaEntry.height = sharpInfo.height;
                 }
+            }
+
+            // ─── 2. cover_fraction ────────────────────────────────────────
+            //    - trimis de client (auto din preview SAU slider) → îl respectăm;
+            //    - lipsă (slide nemontat în preview) → îl calculăm AICI din
+            //      dimensiunile reale, identic cu logica din preview.
+            //    Doar pentru imagini — video-ul nu folosește cover_fraction în feed.
+            if (typeof currentCoverFraction === 'number' && Number.isFinite(currentCoverFraction)) {
+                mediaEntry.cover_fraction = currentCoverFraction;
+            } else if (!isVideo && mediaEntry.width > 0 && mediaEntry.height > 0) {
+                const tallness = mediaEntry.height / mediaEntry.width;
+                mediaEntry.cover_fraction = tallness >= COVER_TALLNESS_THRESHOLD ? 1 : 0;
             }
 
             finalMediaUrls.push(mediaEntry);
