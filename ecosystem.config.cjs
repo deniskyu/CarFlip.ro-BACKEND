@@ -23,7 +23,7 @@ module.exports = {
             script: './src/mediaProcessing/mediaWorker.js',
             instances: 1,          // Worker-ul rămâne UN singur proces
             exec_mode: 'fork',     // ← fork, NU cluster (BullMQ nu suportă cluster)
-            max_memory_restart: '800M',
+            max_memory_restart: '2000M',
             env: {
                 NODE_ENV: 'production'
             },

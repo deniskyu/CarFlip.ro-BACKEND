@@ -9,6 +9,8 @@ import path from 'path';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 
+import { checkAvatar } from "../mediaProcessing/avatarNsfwClient.js";
+
 
 const userProfiles = Router();
 
@@ -262,6 +264,25 @@ userProfiles.post('/api/user/avatar', authUser, fetchLimiter, uploadAvatar, asyn
         if (!currentUser) return res.status(404).json({ success: false, message: "Utilizator negăsit." });
 
         const oldIcon = currentUser.icon;
+
+                try {
+            const smallBuf = await sharp(req.file.buffer)
+                .rotate()
+                .resize(512, 512, { fit: 'inside', withoutEnlargement: true })
+                .jpeg()
+                .toBuffer();
+            const verdict = await checkAvatar(smallBuf); // 'block' | 'pass' | 'skip', nu aruncă
+            if (verdict === 'block') {
+                // shadow-block: păstrăm poza veche, răspundem ca un succes normal
+                return res.json({ success: true, newUrl: oldIcon, message: 'Avatar schimbat.' });
+            }
+        } catch (e) {
+            // fail-open: continuăm upload-ul normal
+        }
+        // ──────────────────────────────────────────────────────────────────────
+
+
+        
         const newPublicUrl = await uploadToR2(req.file);
 
         currentUser.icon = newPublicUrl;
