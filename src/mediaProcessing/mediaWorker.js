@@ -62,6 +62,7 @@ let nsfwReady = false;
 
 // Încărcăm modelul O SINGURĂ DATĂ la pornirea worker-ului. Dacă eșuează,
 // nsfwReady rămâne false → toate joburile sar peste NSFW (fail-open).
+console.log('🔄 ÎNAINTE DE IIFE');
 (async () => {
     console.log('🔄 NSFW: backend TF:', tf.getBackend());
     try {
@@ -75,6 +76,7 @@ let nsfwReady = false;
         console.error('⚠️ NSFW EROARE COMPLETĂ:', err);
     }
 })();
+console.log('🔄 DUPĂ IIFE (sync)');
 
 // Clasifică un buffer JPEG mic. Întoarce true dacă e conținut interzis.
 // Eliberează ÎNTOTDEAUNA tensorul (dispose în finally) — fără leak.
