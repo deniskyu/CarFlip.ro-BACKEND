@@ -64,11 +64,12 @@ let nsfwReady = false;
 // nsfwReady rămâne false → toate joburile sar peste NSFW (fail-open).
 console.log('🔄 ÎNAINTE DE IIFE');
 (async () => {
-    console.log('🔄 NSFW: backend TF:', tf.getBackend());
     try {
-        const modelPath = `file://${path.join(process.cwd(), 'node_modules/nsfwjs/dist/models/mobilenet_v2')}/`;
-        console.log('🔄 NSFW: încarc modelul din:', modelPath);
-        nsfwModel = await nsfwjsModule.load(modelPath);
+        console.log('🔄 NSFW: backend TF:', tf.getBackend());
+        // interop CJS/ESM: load poate fi pe .default SAU direct pe namespace
+        const nsfw = nsfwjsModule.default ?? nsfwjsModule;
+        console.log('🔄 NSFW: typeof load =', typeof nsfw.load);
+        nsfwModel = await nsfw.load();   // FĂRĂ path → modelul ÎMPACHETAT (asta vrei)
         nsfwReady = true;
         console.log('✅ NSFW: model încărcat, filtru ACTIV.');
     } catch (err) {
