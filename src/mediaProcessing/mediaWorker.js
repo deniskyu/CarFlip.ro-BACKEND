@@ -7,7 +7,7 @@ import path from 'path';
 import sales from '../models/salesModel.js'; 
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'; 
 import * as tf from '@tensorflow/tfjs-node';
-import nsfwjsModule from 'nsfwjs';
+import * as nsfwjsModule from 'nsfwjs';
 //import Stripe from 'stripe';
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
