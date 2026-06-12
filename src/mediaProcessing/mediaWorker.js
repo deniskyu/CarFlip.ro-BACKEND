@@ -65,7 +65,9 @@ let nsfwReady = false;
 (async () => {
     console.log('🔄 NSFW: backend TF:', tf.getBackend());
     try {
-        nsfwModel = await nsfwjsModule.load();
+        const modelPath = `file://${path.join(process.cwd(), 'node_modules/nsfwjs/dist/models/mobilenet_v2/model.min.js')}`;
+        console.log('🔄 NSFW: încarc modelul din:', modelPath);
+        nsfwModel = await nsfwjsModule.load(modelPath);
         nsfwReady = true;
         console.log('✅ NSFW: model încărcat, filtru ACTIV.');
     } catch (err) {
