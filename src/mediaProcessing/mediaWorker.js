@@ -6,8 +6,8 @@ import fs from 'fs-extra';
 import path from 'path';
 import sales from '../models/salesModel.js'; 
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'; 
-import * as tf from '@tensorflow/tfjs-node';   // NOU: backend TensorFlow pentru NSFW
-import * as nsfwjs from 'nsfwjs';              // NOU: clasificator NSFW
+import * as tf from '@tensorflow/tfjs-node';
+import nsfwjsModule from 'nsfwjs';
 //import Stripe from 'stripe';
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -63,14 +63,14 @@ let nsfwReady = false;
 // Încărcăm modelul O SINGURĂ DATĂ la pornirea worker-ului. Dacă eșuează,
 // nsfwReady rămâne false → toate joburile sar peste NSFW (fail-open).
 (async () => {
+    console.log('🔄 NSFW: backend TF:', tf.getBackend());
     try {
-        const nsfwLib = nsfwjs.default ?? nsfwjs; // defensiv la interop CJS/ESM
-        nsfwModel = await nsfwLib.load();          // model default (MobileNetV2)
+        nsfwModel = await nsfwjsModule.load();
         nsfwReady = true;
         console.log('✅ NSFW: model încărcat, filtru ACTIV.');
     } catch (err) {
         nsfwReady = false;
-        console.error('⚠️ NSFW: modelul NU s-a încărcat — filtru DEZACTIVAT (fail-open):', err?.message || err);
+        console.error('⚠️ NSFW EROARE COMPLETĂ:', err);
     }
 })();
 
