@@ -66,7 +66,7 @@ console.log('🔄 ÎNAINTE DE IIFE');
 (async () => {
     console.log('🔄 NSFW: backend TF:', tf.getBackend());
     try {
-        const modelPath = `file://${path.join(process.cwd(), 'node_modules/nsfwjs/dist/models/mobilenet_v2/model.min.js')}`;
+        const modelPath = `file://${path.join(process.cwd(), 'node_modules/nsfwjs/dist/models/mobilenet_v2')}`;
         console.log('🔄 NSFW: încarc modelul din:', modelPath);
         nsfwModel = await nsfwjsModule.load(modelPath);
         nsfwReady = true;
