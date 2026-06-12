@@ -682,3 +682,4 @@ export const avatarNsfwWorker = new Worker('AvatarNsfwQueue', async job => {
     connection: redisConnection,
     concurrency: 3 // bandă proprie pentru avatare; nu blochează coada media. Poți pune și 1.
 });
+
