@@ -6,8 +6,6 @@ import fs from 'fs-extra';
 import path from 'path';
 import sales from '../models/salesModel.js'; 
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'; 
-import * as tf from '@tensorflow/tfjs-node';
-import * as nsfwjsModule from 'nsfwjs';
 //import Stripe from 'stripe';
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -37,156 +35,6 @@ const s3 = new S3Client({
 //     în preview (PreviewItem.jsx → defaultFraction). Folosit DOAR ca fallback,
 //     când clientul nu a trimis un cover_fraction (ex: slide nemontat în preview).
 const COVER_TALLNESS_THRESHOLD = 1.34;
-
-// ============================================================================
-//  NSFW — filtru de conținut (FAIL-OPEN TOTAL)
-// ----------------------------------------------------------------------------
-//  Rulează ca pre-pass ÎNAINTE de procesare/upload, în ambele ramuri. Modulul
-//  e construit ca să NU poată arunca niciodată o eroare în job: întoarce
-//  'block' | 'pass' | 'skip'. Doar 'block' oprește un anunț; orice eroare,
-//  timeout sau model indisponibil → 'skip' → anunțul se publică normal.
-//  Cel mai rău caz posibil: NSFW-ul nu rulează pentru un anunț. Niciodată crash.
-// ============================================================================
-const NSFW_PORN_THRESHOLD   = 0.8;   // block dacă Porn   >= 0.8
-const NSFW_HENTAI_THRESHOLD = 0.8;   // block dacă Hentai >= 0.8  (Sexy ignorat complet)
-const NSFW_TIMEOUT_MS       = 30000; // buget global pe tot pasul NSFW, per job
-const NSFW_FRAME_FPS        = 1;     // 1 cadru / secundă din video
-const NSFW_FRAME_SIZE       = 512;   // imaginile/cadrele scalate la 512px pt. clasificare
-const NSFW_MAX_FRAMES       = 60;    // plafon de siguranță la extragerea de cadre
-
-const NSFW_FRAME_BASE = path.join(process.cwd(), 'temp_uploads', 'nsfw_frames');
-fs.ensureDirSync(NSFW_FRAME_BASE);
-
-let nsfwModel = null;
-let nsfwReady = false;
-
-// Încărcăm modelul O SINGURĂ DATĂ la pornirea worker-ului. Dacă eșuează,
-// nsfwReady rămâne false → toate joburile sar peste NSFW (fail-open).
-console.log('🔄 ÎNAINTE DE IIFE');
-(async () => {
-    try {
-        console.log('🔄 NSFW: backend TF:', tf.getBackend());
-        // interop CJS/ESM: load poate fi pe .default SAU direct pe namespace
-        const nsfw = nsfwjsModule.default ?? nsfwjsModule;
-        console.log('🔄 NSFW: typeof load =', typeof nsfw.load);
-        nsfwModel = await nsfw.load();   // FĂRĂ path → modelul ÎMPACHETAT (asta vrei)
-        nsfwReady = true;
-        console.log('✅ NSFW: model încărcat, filtru ACTIV.');
-    } catch (err) {
-        nsfwReady = false;
-        console.error('⚠️ NSFW EROARE COMPLETĂ:', err);
-    }
-})();
-console.log('🔄 DUPĂ IIFE (sync)');
-
-// Clasifică un buffer JPEG mic. Întoarce true dacă e conținut interzis.
-// Eliberează ÎNTOTDEAUNA tensorul (dispose în finally) — fără leak.
-const nsfwClassifyBuffer = async (buffer) => {
-    let decoded = null;
-    try {
-        decoded = tf.node.decodeImage(buffer, 3);
-        const preds = await nsfwModel.classify(decoded);
-        let porn = 0, hentai = 0;
-        for (const p of preds) {
-            if (p.className === 'Porn') porn = p.probability;
-            else if (p.className === 'Hentai') hentai = p.probability;
-        }
-        return porn >= NSFW_PORN_THRESHOLD || hentai >= NSFW_HENTAI_THRESHOLD;
-    } finally {
-        if (decoded) decoded.dispose();
-    }
-};
-
-// Imagine: redimensionăm originalul la 512px (input mic → memorie mărginită),
-// apoi clasificăm. .rotate() ca să clasificăm imaginea în orientarea corectă.
-const nsfwClassifyImage = async (filePath) => {
-    const buf = await sharp(filePath)
-        .rotate()
-        .resize(NSFW_FRAME_SIZE, NSFW_FRAME_SIZE, { fit: 'inside', withoutEnlargement: true })
-        .jpeg()
-        .toBuffer();
-    return nsfwClassifyBuffer(buf); // true dacă e blocat
-};
-
-// Extrage cadre din video cu ffmpeg, cu kill-timer hard pe deadline.
-const nsfwExtractFrames = (videoPath, outDir, deadline) => new Promise((resolve, reject) => {
-    let settled = false;
-    let killer = null;
-    const finish = (fn, arg) => {
-        if (settled) return;
-        settled = true;
-        if (killer) clearTimeout(killer);
-        fn(arg);
-    };
-    const cmd = ffmpeg(videoPath)
-        .outputOptions([
-            '-vf', `fps=${NSFW_FRAME_FPS},scale=${NSFW_FRAME_SIZE}:-2`,
-            '-frames:v', String(NSFW_MAX_FRAMES),
-            '-q:v', '5'
-        ])
-        .on('end', () => finish(resolve))
-        .on('error', (err) => finish(reject, err))
-        .save(path.join(outDir, 'frame_%04d.jpg'));
-
-    const ms = Math.max(1000, deadline - Date.now());
-    killer = setTimeout(() => {
-        try { cmd.kill('SIGKILL'); } catch (e) {}
-        finish(reject, new Error('NSFW: timeout la extragerea cadrelor'));
-    }, ms);
-});
-
-// Video: extrage cadre → clasifică pe rând, early-exit la primul cadru blocat.
-// Întoarce 'block' | 'clean' | 'skip'. Curăță ÎNTOTDEAUNA folderul de cadre.
-const nsfwClassifyVideo = async (filePath, deadline) => {
-    const frameDir = path.join(NSFW_FRAME_BASE, `f_${Date.now()}_${Math.round(Math.random() * 1e9)}`);
-    await fs.ensureDir(frameDir);
-    try {
-        await nsfwExtractFrames(filePath, frameDir, deadline);
-        const frames = (await fs.readdir(frameDir)).filter(f => f.endsWith('.jpg')).sort();
-        for (const f of frames) {
-            if (Date.now() > deadline) return 'skip'; // am depășit bugetul
-            const buf = await fs.readFile(path.join(frameDir, f));
-            if (await nsfwClassifyBuffer(buf)) return 'block';
-        }
-        return 'clean';
-    } finally {
-        await fs.remove(frameDir).catch(() => {});
-    }
-};
-
-// Parcurge toate fișierele. Întoarce 'block' | 'pass' | 'skip'. Poate arunca
-// (apelantul prinde și convertește în 'skip').
-const nsfwClassifyAll = async (files, deadline) => {
-    for (const file of files) {
-        if (Date.now() > deadline) return 'skip';
-        const isVideo = file.mimetype && file.mimetype.startsWith('video/');
-        if (isVideo) {
-            const v = await nsfwClassifyVideo(file.path, deadline);
-            if (v === 'block') return 'block';
-            if (v === 'skip') return 'skip';
-            // 'clean' → continuăm cu următorul fișier
-        } else {
-            if (await nsfwClassifyImage(file.path)) return 'block';
-        }
-    }
-    return 'pass';
-};
-
-// Punctul de intrare. NU aruncă NICIODATĂ. Întoarce 'block' | 'pass' | 'skip'.
-const runNsfwCheck = async (files) => {
-    if (!nsfwReady || !nsfwModel) {
-        console.log('🟡 NSFW: skip — model indisponibil (fail-open).');
-        return 'skip';
-    }
-    const deadline = Date.now() + NSFW_TIMEOUT_MS;
-    try {
-        return await nsfwClassifyAll(files, deadline);
-    } catch (err) {
-        console.log('🟡 NSFW: skip — eroare în clasificare (fail-open):', err?.message || err);
-        return 'skip';
-    }
-};
-// ============================================================================
 
 const processVideo = (inputPath, outputPath) => {
     return new Promise((resolve, reject) => {
@@ -257,22 +105,6 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                     throw new Error(`FIȘIER_LIPSĂ: ${file.path} — nu există pe disk. Probabil serverul s-a repornit.`);
                 }
             }
-
-            // ─── NSFW pre-pass (NOU) ─────────────────────────────────────────
-            // La editare, pe 'block' PĂSTRĂM media veche (nu facem swap). Doar
-            // pe prima încercare (skip-on-retry). Fail-open total.
-            if (job.attemptsMade === 0) {
-                const nsfwVerdict = await runNsfwCheck(files);
-                if (nsfwVerdict === 'block') {
-                    console.log(`🚫 NSFW: editarea anunțului ${saleId} conține conținut interzis — păstrăm media veche.`);
-                    for (const file of files) {
-                        await fs.unlink(file.path).catch(() => {});
-                    }
-                    return; // anunțul rămâne neatins (media veche); job cu succes, fără retry
-                }
-                console.log(`✅ NSFW: editarea ${saleId} → ${nsfwVerdict}.`);
-            }
-            // ─────────────────────────────────────────────────────────────────
 
             // Procesăm fișierele noi — identic cu fluxul normal
             for (const [index, file] of files.entries()) {
@@ -429,24 +261,6 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                 throw new Error(`FIȘIER_LIPSĂ: ${file.path} — nu există pe disk. Probabil serverul s-a repornit.`);
             }
         }
-
-        // ─── NSFW pre-pass (NOU) ─────────────────────────────────────────────
-        // Rulează ÎNAINTE de procesare/upload, doar pe prima încercare
-        // (skip-on-retry). Fail-open total: doar 'block' oprește anunțul; orice
-        // altceva ('pass'/'skip') → execuția curge în logica existentă neatinsă.
-        if (job.attemptsMade === 0) {
-            const nsfwVerdict = await runNsfwCheck(files);
-            if (nsfwVerdict === 'block') {
-                console.log(`🚫 NSFW: anunțul ${saleId} conține conținut interzis — NU se publică.`);
-                await sales.findByIdAndUpdate(saleId, { status: 'failed_media', is_active: false });
-                for (const file of files) {
-                    await fs.unlink(file.path).catch(() => {});
-                }
-                return; // job complet cu succes (fără retry); finally curăță temp (gol acum)
-            }
-            console.log(`✅ NSFW: anunțul ${saleId} → ${nsfwVerdict}.`);
-        }
-        // ─────────────────────────────────────────────────────────────────────
 
         for (const [index, file] of files.entries()) {
             const isVideo = file.mimetype.startsWith('video/');
@@ -662,24 +476,3 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
     connection: redisConnection,
     concurrency: 1 
 });
-
-
-// ─── Worker secundar: clasificare NSFW pentru avatare (coadă separată) ───────
-// Rulează în ACELAȘI proces → refolosește modelul deja încărcat (zero RAM în plus).
-// Coadă separată → nu așteaptă în spatele joburilor de video.
-// Procesorul NU aruncă NICIODATĂ: întoarce 'block' | 'pass' | 'skip' (fail-open).
-export const avatarNsfwWorker = new Worker('AvatarNsfwQueue', async job => {
-    try {
-        if (!nsfwReady || !nsfwModel) return 'skip';
-        const buffer = Buffer.from(job.data.image, 'base64');
-        const blocked = await nsfwClassifyBuffer(buffer); // decode + classify + dispose (deja există)
-        return blocked ? 'block' : 'pass';
-    } catch (err) {
-        console.log('🟡 NSFW (avatar worker): skip — eroare (fail-open):', err?.message || err);
-        return 'skip';
-    }
-}, {
-    connection: redisConnection,
-    concurrency: 3 // bandă proprie pentru avatare; nu blochează coada media. Poți pune și 1.
-});
-
