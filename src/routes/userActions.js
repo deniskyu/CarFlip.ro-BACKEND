@@ -3182,9 +3182,45 @@ userActions.get('/api/sales/search-list', authUser, fetchLimiter, async (req, re
 
         pipeline.push({ $match: { user_id: { $ne: null } } });
 
-        // ── EXECUTE ───────────────────────────────────────────────────
+// ── TOTAL COUNT (doar la prima pagină, fără cursor) ───────────
+        let totalCountPromise = Promise.resolve(null);
+        if (!cursor) {
+            if (exclude_seen === 'true') {
+                totalCountPromise = sales.aggregate([
+                    { $match: query },
+                    {
+                        $lookup: {
+                            from: 'seenposts',
+                            let: { saleId: '$_id' },
+                            pipeline: [
+                                {
+                                    $match: {
+                                        $expr: {
+                                            $and: [
+                                                { $eq: ['$sale_id', '$$saleId'] },
+                                                { $eq: ['$user_id', userObjectId] }
+                                            ]
+                                        }
+                                    }
+                                },
+                                { $limit: 1 }
+                            ],
+                            as: 'seenCheck'
+                        }
+                    },
+                    { $match: { seenCheck: { $size: 0 } } },
+                    { $count: 'total' }
+                ]).then(r => (r[0] ? r[0].total : 0));
+            } else {
+                totalCountPromise = sales.countDocuments(query).catch(() => null);
+            }
+        }
 
-        const results = await sales.aggregate(pipeline);
+        // ── EXECUTE ───────────────────────────────────────────────────
+        const [results, totalCount] = await Promise.all([
+            sales.aggregate(pipeline),
+            totalCountPromise
+        ]); 
 
         // ── BUILD NEXT CURSOR ─────────────────────────────────────────
 
@@ -3204,7 +3240,8 @@ userActions.get('/api/sales/search-list', authUser, fetchLimiter, async (req, re
             data: results,
             nextCursor,
             hasMore,
-            count: results.length
+            count: results.length,
+            totalCount
         });
 
     } catch (error) {
