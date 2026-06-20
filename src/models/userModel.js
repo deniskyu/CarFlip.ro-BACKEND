@@ -29,7 +29,10 @@ const userSchema = new mongoose.Schema({
     },
     password: {
         type: String,
-        required: true,
+    },
+
+    googleId: {
+        type: String,
     },
     
     refreshTokens: {
@@ -100,6 +103,10 @@ const userSchema = new mongoose.Schema({
     timestamps: true 
 });
 userSchema.index({ "refreshTokens.token": 1 });
+userSchema.index(
+    { googleId: 1 },
+    { unique: true, partialFilterExpression: { googleId: { $type: "string" } } }
+);
 
 const users = mongoose.models.users || mongoose.model("users", userSchema);
 export default users;

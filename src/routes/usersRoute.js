@@ -15,6 +15,7 @@ import Notifications from '../models/notificationModel.js';
 import Conversation from '../models/conversationModel.js';
 import Message from '../models/messageModel.js';
 import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { OAuth2Client } from 'google-auth-library';
 //import Stripe from 'stripe';
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -55,6 +56,74 @@ const hashString = async (string) => {
 const compareString = async (string, hashedString) => {
     return await bcrypt.compare(string, hashedString);
 }
+
+const googleClient = new OAuth2Client();
+
+// Generează un username unic din email/nume, cu sufix random.
+const generateGoogleUsername = async (base) => {
+    let clean = (base || 'user').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12);
+    if (clean.length < 3) clean = 'user';
+
+    for (let i = 0; i < 5; i++) {
+        const candidate = `${clean}${Math.floor(1000 + Math.random() * 9000)}`;
+        const taken = await users.findOne({ username: candidate }).select('_id').lean();
+        if (!taken) return candidate;
+    }
+    return `${clean}${Date.now().toString().slice(-6)}`;
+};
+
+// Create-or-login + linking sigur. Întoarce documentul user.
+const resolveGoogleUser = async ({ googleId, email, name, picture }) => {
+    // A. Întâi pe googleId (identificator stabil) → user care revine.
+    let user = await users.findOne({ googleId });
+    if (user) return user;
+
+    // B. Pe email → linking cu un cont existent.
+    user = await users.findOne({ email });
+    if (user) {
+        if (user.isVerified === true) {
+            // Cont verificat: deținerea inboxului a fost dovedită cândva prin OTP.
+            // Google confirmă același inbox → aceeași persoană. Atașăm googleId.
+            user.googleId = googleId;
+            if (picture && (!user.icon || user.icon.includes('gravatar'))) {
+                user.icon = picture;
+            }
+        } else {
+            // Cont local NEVERIFICAT: nimeni n-a dovedit emailul pe ruta locală.
+            // Google l-a dovedit → preluăm în siguranță, ștergem parola/OTP neprobate.
+            user.googleId = googleId;
+            user.isVerified = true;
+            user.password = undefined;
+            user.verificationCode = undefined;
+            user.verificationExpires = undefined;
+            if (picture) user.icon = picture;
+        }
+        await user.save();
+        return user;
+    }
+
+    // C. Cont nou — cu retry pe coliziunea (foarte rară) de username.
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const username = await generateGoogleUsername(email.split('@')[0] || name);
+        try {
+            return await users.create({
+                username, email, googleId,
+                isVerified: true,
+                icon: picture || undefined,
+            });
+        } catch (err) {
+            if (err.code === 11000) {
+                // dublu-tap real pe același user → ia-l pe cel creat între timp
+                const existing = await users.findOne({ $or: [{ googleId }, { email }] });
+                if (existing) return existing;
+                // altfel a fost doar coliziune de username → reîncearcă cu altul
+                if (err.keyPattern?.username) continue;
+            }
+            throw err;
+        }
+    }
+    throw new Error('Nu s-a putut genera un username unic.');
+};
 
 const mailgun = new Mailgun(formData);
 const client = mailgun.client({ username: 'api', key: process.env.MAILGUN_KEY, url: 'https://api.eu.mailgun.net' });
@@ -148,8 +217,11 @@ userRoute.post('/api/user/register',
             let user = await users.findOne({ email: lowerEmail });
 
             if (user) {
-                // FIX LEGACY: Orice nu este EXPLICIT false, înseamnă că e un cont valid/vechi și nu trebuie atins
                 if (user.isVerified === true) {
+                    // Dacă e cont Google (fără parolă), trimitem userul spre login-ul Google.
+                    if (user.googleId && !user.password) {
+                        return res.json({ success: false, message: "Acest email folosește autentificare Google. Conectează-te cu butonul Google." });
+                    }
                     return res.json({ success: false, message: "Acest email este deja asociat unui cont activ." });
                 }
             }
@@ -333,6 +405,80 @@ userRoute.post('/api/user/login',
         }
     }
 )
+
+
+userRoute.post('/api/user/google-auth',
+    loginLimiter,
+    async (req, res) => {
+        const { idToken, fcmToken } = req.body;
+        if (!idToken) return res.json({ success: false, message: "Token lipsă." });
+
+        try {
+            // 1. Verificăm token-ul cu Google (semnătură + aud + iss + exp).
+            let payload;
+            try {
+                const ticket = await googleClient.verifyIdToken({
+                    idToken,
+                    audience: process.env.GOOGLE_WEB_CLIENT_ID,
+                });
+                payload = ticket.getPayload();
+            } catch (verifyErr) {
+                console.warn("Google token invalid:", verifyErr.message);
+                return res.json({ success: false, message: "Autentificare Google invalidă." });
+            }
+
+            // 2. Datele de încredere din token.
+            const googleId = payload.sub;
+            const email = (payload.email || '').trim().toLowerCase();
+            const name = payload.name || '';
+            const picture = payload.picture || null;
+
+            if (!googleId || !email)
+                return res.json({ success: false, message: "Cont Google incomplet." });
+            // 3. Emailul TREBUIE verificat de Google.
+            if (payload.email_verified !== true)
+                return res.json({ success: false, message: "Emailul Google nu este verificat." });
+
+            // 4. Create-or-login + linking.
+            const user = await resolveGoogleUser({ googleId, email, name, picture });
+
+            // 5. Cont banat → stop.
+            if (user.isBanned === true)
+                return res.json({ success: false, message: "Contul a fost restricționat." });
+
+            // 6. Tokeni IDENTICI cu login-ul normal.
+            const newAccessToken = jwt.sign(
+                { id: user._id, email: user.email },
+                process.env.JWT_SECRET, { expiresIn: "20m" }
+            );
+            const newRefreshToken = jwt.sign(
+                { id: user._id },
+                process.env.JWT_REFRESH_SECRET, { expiresIn: "120d" }
+            );
+
+            // 7. Sesiune cu fcmToken, păstrăm ultimele 5 (exact ca la login).
+            await users.findByIdAndUpdate(user._id, {
+                $push: {
+                    refreshTokens: {
+                        $each: [{ token: newRefreshToken, fcmToken: fcmToken || null }],
+                        $slice: -5
+                    }
+                }
+            });
+
+            return res.json({
+                success: true,
+                message: "Autentificare reușită.",
+                newAccessToken, newRefreshToken,
+                username: user.username
+            });
+
+        } catch (er) {
+            console.error("Google Auth Error:", er);
+            return res.json({ success: false, message: "A apărut o eroare. Încearcă mai târziu." });
+        }
+    }
+);
 
 // --- REFRESH TOKEN (UPDATED FOR ROTATION + FCM PRESERVATION) ---
 userRoute.post("/api/user/refresh",
