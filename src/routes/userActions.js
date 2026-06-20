@@ -114,10 +114,10 @@ userActions.post('/api/sale/post/free',
                 });
             }
 
-            if (description.trim().length > 1000) {
+            if (description.trim().length > 1500) {
                 return res.status(400).json({ 
                     success: false, 
-                    message: "Descrierea este prea lungă. Limita maximă este de 1000 de caractere." 
+                    message: "Descrierea este prea lungă. Limita maximă este de 1500 de caractere." 
                 });
             }
 
@@ -2011,10 +2011,10 @@ userActions.put('/api/sales/edit/:id', authUser, fetchLimiter, async (req, res) 
             });
         }
 
-        if (description !== undefined && description.trim().length > 1000) {
+        if (description !== undefined && description.trim().length > 1500) {
             return res.status(400).json({ 
                 success: false, 
-                message: "Descrierea este prea lungă. Limita maximă este de 1000 de caractere." 
+                message: "Descrierea este prea lungă. Limita maximă este de 1500 de caractere." 
             });
         }
 
@@ -2149,10 +2149,10 @@ userActions.put('/api/sales/edit-with-media/:id',
                 });
             }
 
-            if (description !== undefined && description.trim().length > 1000) {
+            if (description !== undefined && description.trim().length > 1500) {
                 return res.status(400).json({ 
                     success: false, 
-                    message: "Descrierea este prea lungă. Limita maximă este de 1000 de caractere." 
+                    message: "Descrierea este prea lungă. Limita maximă este de 1500 de caractere." 
                 });
             }
 
