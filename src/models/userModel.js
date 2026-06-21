@@ -34,6 +34,7 @@ const userSchema = new mongoose.Schema({
     googleId: {
         type: String,
     },
+    appleId: { type: String },
     
     refreshTokens: {
         type: [sessionSchema], 
@@ -107,6 +108,7 @@ userSchema.index(
     { googleId: 1 },
     { unique: true, partialFilterExpression: { googleId: { $type: "string" } } }
 );
+userSchema.index({ appleId: 1 }, { unique: true, partialFilterExpression: { appleId: { $type: "string" } } });
 
 const users = mongoose.models.users || mongoose.model("users", userSchema);
 export default users;

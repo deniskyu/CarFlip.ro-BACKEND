@@ -18,6 +18,7 @@ import { S3Client, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { OAuth2Client } from 'google-auth-library';
 //import Stripe from 'stripe';
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+import appleSignin from 'apple-signin-auth';
 
 
 // Configurare R2 (copiază din userProfiles dacă nu e deja partajat)
@@ -58,6 +59,7 @@ const compareString = async (string, hashedString) => {
 }
 
 const googleClient = new OAuth2Client();
+const APPLE_AUDIENCE = process.env.APPLE_BUNDLE_ID || 'ro.carflip.app';
 
 // Generează un username unic din email/nume, cu sufix random.
 const generateGoogleUsername = async (base) => {
@@ -117,6 +119,60 @@ const resolveGoogleUser = async ({ googleId, email, name, picture }) => {
                 const existing = await users.findOne({ $or: [{ googleId }, { email }] });
                 if (existing) return existing;
                 // altfel a fost doar coliziune de username → reîncearcă cu altul
+                if (err.keyPattern?.username) continue;
+            }
+            throw err;
+        }
+    }
+    throw new Error('Nu s-a putut genera un username unic.');
+};
+
+// Construiește numele din fullName-ul Apple (vine doar la primul sign-in).
+const buildAppleName = (fullName) => {
+    if (!fullName) return '';
+    if (typeof fullName === 'string') return fullName.trim();
+    const parts = [fullName.givenName, fullName.familyName].filter(Boolean);
+    return parts.join(' ').trim();
+};
+
+// Create-or-login + linking sigur pentru Apple. Întoarce documentul user.
+const resolveAppleUser = async ({ appleId, email, name }) => {
+    // A. Întâi pe appleId (identificator stabil) → user care revine.
+    let user = await users.findOne({ appleId });
+    if (user) return user;
+
+    // B. Pe email → linking cu un cont existent (doar dacă avem email).
+    if (email) {
+        user = await users.findOne({ email });
+        if (user) {
+            if (user.isVerified === true) {
+                user.appleId = appleId;
+            } else {
+                user.appleId = appleId;
+                user.isVerified = true;
+                user.password = undefined;
+                user.verificationCode = undefined;
+                user.verificationExpires = undefined;
+            }
+            await user.save();
+            return user;
+        }
+    }
+
+    // C. Cont nou. Apple fără email la cont nou = nu putem crea (email obligatoriu).
+    if (!email) throw new Error('NO_EMAIL_NEW_USER');
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const username = await generateGoogleUsername(email.split('@')[0] || name);
+        try {
+            return await users.create({
+                username, email, appleId,
+                isVerified: true,
+            });
+        } catch (err) {
+            if (err.code === 11000) {
+                const existing = await users.findOne({ $or: [{ appleId }, { email }] });
+                if (existing) return existing;
                 if (err.keyPattern?.username) continue;
             }
             throw err;
@@ -475,6 +531,85 @@ userRoute.post('/api/user/google-auth',
 
         } catch (er) {
             console.error("Google Auth Error:", er);
+            return res.json({ success: false, message: "A apărut o eroare. Încearcă mai târziu." });
+        }
+    }
+);
+
+userRoute.post('/api/user/apple-auth',
+    loginLimiter,
+    async (req, res) => {
+        const { identityToken, fullName, fcmToken } = req.body;
+        if (!identityToken) return res.json({ success: false, message: "Token lipsă." });
+
+        try {
+            // 1. Verificăm token-ul cu Apple (semnătură + aud + iss + exp).
+            let payload;
+            try {
+                payload = await appleSignin.verifyIdToken(identityToken, {
+                    audience: APPLE_AUDIENCE,
+                });
+            } catch (verifyErr) {
+                console.warn("Apple token invalid:", verifyErr.message);
+                return res.json({ success: false, message: "Autentificare Apple invalidă." });
+            }
+
+            // 2. Datele de încredere din token.
+            const appleId = payload.sub;
+            const email = (payload.email || '').trim().toLowerCase() || null;
+            const emailVerified = payload.email_verified === true || payload.email_verified === 'true';
+
+            if (!appleId)
+                return res.json({ success: false, message: "Cont Apple incomplet." });
+            // 3. Dacă avem email, TREBUIE verificat de Apple.
+            if (email && !emailVerified)
+                return res.json({ success: false, message: "Emailul Apple nu este verificat." });
+
+            const name = buildAppleName(fullName);
+
+            // 4. Create-or-login + linking.
+            let user;
+            try {
+                user = await resolveAppleUser({ appleId, email, name });
+            } catch (resolveErr) {
+                if (resolveErr.message === 'NO_EMAIL_NEW_USER')
+                    return res.json({ success: false, message: "Cont Apple incomplet. Reîncearcă." });
+                throw resolveErr;
+            }
+
+            // 5. Cont banat → stop.
+            if (user.isBanned === true)
+                return res.json({ success: false, message: "Contul a fost restricționat." });
+
+            // 6. Tokeni IDENTICI cu login-ul normal.
+            const newAccessToken = jwt.sign(
+                { id: user._id, email: user.email },
+                process.env.JWT_SECRET, { expiresIn: "20m" }
+            );
+            const newRefreshToken = jwt.sign(
+                { id: user._id },
+                process.env.JWT_REFRESH_SECRET, { expiresIn: "120d" }
+            );
+
+            // 7. Sesiune cu fcmToken, păstrăm ultimele 5 (exact ca la login).
+            await users.findByIdAndUpdate(user._id, {
+                $push: {
+                    refreshTokens: {
+                        $each: [{ token: newRefreshToken, fcmToken: fcmToken || null }],
+                        $slice: -5
+                    }
+                }
+            });
+
+            return res.json({
+                success: true,
+                message: "Autentificare reușită.",
+                newAccessToken, newRefreshToken,
+                username: user.username
+            });
+
+        } catch (er) {
+            console.error("Apple Auth Error:", er);
             return res.json({ success: false, message: "A apărut o eroare. Încearcă mai târziu." });
         }
     }
