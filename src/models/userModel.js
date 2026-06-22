@@ -36,6 +36,8 @@ const userSchema = new mongoose.Schema({
     },
     appleId: { type: String },
     
+    appleRefreshToken: { type: String, default: null },
+
     refreshTokens: {
         type: [sessionSchema], 
         default: [],

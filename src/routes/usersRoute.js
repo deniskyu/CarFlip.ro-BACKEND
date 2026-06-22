@@ -181,6 +181,66 @@ const resolveAppleUser = async ({ appleId, email, name }) => {
     throw new Error('Nu s-a putut genera un username unic.');
 };
 
+// =========================================================================
+//   APPLE — REVOCARE TOKEN (necesară la ștergerea contului pentru App Store)
+// -------------------------------------------------------------------------
+//   Toate funcțiile de mai jos sunt BEST-EFFORT: nu aruncă niciodată, deci
+//   dacă env-urile lipsesc sau Apple dă eroare, login-ul/ștergerea merg
+//   normal, doar se loghează un warning. Revocarea se "armează" automat în
+//   momentul în care pui APPLE_TEAM_ID / APPLE_KEY_ID / APPLE_PRIVATE_KEY.
+// =========================================================================
+
+// Avem tot ce trebuie ca să vorbim cu API-ul REST Apple? (env-uri din cheia .p8)
+const APPLE_REVOKE_READY = !!(
+    process.env.APPLE_TEAM_ID &&
+    process.env.APPLE_KEY_ID &&
+    process.env.APPLE_PRIVATE_KEY
+);
+
+// Client secret-ul Apple = un JWT semnat cu cheia .p8. Îl regenerăm la fiecare
+// apel (e ieftin) ca să nu ținem un secret expirat în memorie.
+const getAppleClientSecret = () => appleSignin.getClientSecret({
+    clientID: APPLE_AUDIENCE,                                          // Bundle ID-ul (flux nativ iOS)
+    teamID: process.env.APPLE_TEAM_ID,                                // Team ID
+    keyIdentifier: process.env.APPLE_KEY_ID,                          // Key ID-ul cheii .p8
+    privateKey: (process.env.APPLE_PRIVATE_KEY || '').replace(/\\n/g, '\n'), // conținutul .p8
+    expAfter: 300,                                                    // valabil 5 min, cât să facă apelul
+});
+
+// Schimbă authorizationCode pe un refresh token Apple și-l salvează pe user.
+// Best-effort: dacă pică, login-ul Apple NU e afectat.
+const storeAppleRefreshToken = async (userId, authorizationCode) => {
+    if (!APPLE_REVOKE_READY || !authorizationCode) return;
+    try {
+        const clientSecret = getAppleClientSecret();
+        // Flux nativ → fără redirectUri (query-string sare valorile undefined).
+        const tokenResponse = await appleSignin.getAuthorizationToken(authorizationCode, {
+            clientID: APPLE_AUDIENCE,
+            clientSecret,
+        });
+        if (tokenResponse?.refresh_token) {
+            await users.findByIdAndUpdate(userId, { appleRefreshToken: tokenResponse.refresh_token });
+        }
+    } catch (e) {
+        console.warn('Apple token exchange skip:', e?.message);
+    }
+};
+
+// Revocă refresh token-ul Apple. Best-effort: nu aruncă niciodată.
+const revokeAppleToken = async (refreshToken) => {
+    if (!APPLE_REVOKE_READY || !refreshToken) return;
+    try {
+        const clientSecret = getAppleClientSecret();
+        await appleSignin.revokeAuthorizationToken(refreshToken, {
+            clientID: APPLE_AUDIENCE,
+            clientSecret,
+            tokenTypeHint: 'refresh_token',
+        });
+    } catch (e) {
+        console.warn('Apple revoke skip:', e?.message);
+    }
+};
+
 const mailgun = new Mailgun(formData);
 const client = mailgun.client({ username: 'api', key: process.env.MAILGUN_KEY, url: 'https://api.eu.mailgun.net' });
 
@@ -274,9 +334,12 @@ userRoute.post('/api/user/register',
 
             if (user) {
                 if (user.isVerified === true) {
-                    // Dacă e cont Google (fără parolă), trimitem userul spre login-ul Google.
+                    // Dacă e cont OAuth (fără parolă), trimitem userul spre butonul corect.
                     if (user.googleId && !user.password) {
                         return res.json({ success: false, message: "Acest email folosește autentificare Google. Conectează-te cu butonul Google." });
+                    }
+                    if (user.appleId && !user.password) {
+                        return res.json({ success: false, message: "Acest email folosește autentificare Apple. Conectează-te cu butonul Apple." });
                     }
                     return res.json({ success: false, message: "Acest email este deja asociat unui cont activ." });
                 }
@@ -416,7 +479,9 @@ userRoute.post('/api/user/login',
         
         try {
             const findUser = await users.findOne({ email: email.toLowerCase() });
-            if (!findUser || !await compareString(password, findUser.password) || findUser.isVerified === false)
+            // Conturile OAuth (fără parolă) NU se pot loga pe email+parolă.
+            // `!findUser.password` taie scurt înainte de compareString (care ar arunca pe hash undefined).
+            if (!findUser || !findUser.password || !await compareString(password, findUser.password) || findUser.isVerified === false)
                 return res.json({ success: false, message: "Email sau parola invalide." });
             if(findUser.isBanned === true)
                 return res.json({success: false,  message: 'Contul a fost restrictionat.'})
@@ -539,7 +604,7 @@ userRoute.post('/api/user/google-auth',
 userRoute.post('/api/user/apple-auth',
     loginLimiter,
     async (req, res) => {
-        const { identityToken, fullName, fcmToken } = req.body;
+        const { identityToken, fullName, authorizationCode, fcmToken } = req.body;
         if (!identityToken) return res.json({ success: false, message: "Token lipsă." });
 
         try {
@@ -572,8 +637,10 @@ userRoute.post('/api/user/apple-auth',
             try {
                 user = await resolveAppleUser({ appleId, email, name });
             } catch (resolveErr) {
+                // Apple nu mai trimite emailul la re-autorizare (ex: cont șters server-side apoi re-login).
+                // Retry-ul nu ajută — userul trebuie să revoce app-ul din setările Apple ID.
                 if (resolveErr.message === 'NO_EMAIL_NEW_USER')
-                    return res.json({ success: false, message: "Cont Apple incomplet. Reîncearcă." });
+                    return res.json({ success: false, message: "Apple nu a trimis adresa de email. Mergi în Setări → (numele tău) → Conectare și securitate → Aplicații care folosesc Apple ID → CarFlip → Oprește utilizarea, apoi încearcă din nou." });
                 throw resolveErr;
             }
 
@@ -600,6 +667,10 @@ userRoute.post('/api/user/apple-auth',
                     }
                 }
             });
+
+            // 8. (Revocare) Schimbăm authorizationCode pe un refresh token Apple și-l salvăm.
+            //    Best-effort: dacă pică, nu afectează login-ul de mai sus.
+            await storeAppleRefreshToken(user._id, authorizationCode);
 
             return res.json({
                 success: true,
@@ -785,10 +856,13 @@ userRoute.post('/api/user/reset-password',
                 return res.json({ success: false, message: "Codul introdus este incorect." });
             }
 
-            // 2. Verificăm dacă parola e cumva la fel ca aia veche (Nice-to-have security check)
-            const isSamePassword = await compareString(newPassword, user.password);
-            if (isSamePassword) {
-                return res.json({ success: false, message: "Noua parolă nu poate fi identică cu cea veche." });
+            // 2. Verificăm dacă parola e cumva la fel ca aia veche — DOAR dacă userul are deja parolă.
+            // (Conturile OAuth fără parolă își setează prima parolă aici; compareString pe hash undefined ar arunca.)
+            if (user.password) {
+                const isSamePassword = await compareString(newPassword, user.password);
+                if (isSamePassword) {
+                    return res.json({ success: false, message: "Noua parolă nu poate fi identică cu cea veche." });
+                }
             }
 
             // 4. TOTUL E PERFECT! Schimbăm parola
@@ -829,6 +903,7 @@ userRoute.get('/api/user/data',
                 message: "Am gasit userul cu succes.", 
                 username, 
                 email,
+                hasPassword: !!findUser.password, // frontend-ul știe dacă e cont cu parolă sau OAuth
                 preferredCounty: metaData?.preferredCounty || null
             })
         } catch (er) {
@@ -844,7 +919,8 @@ userRoute.put('/api/user/change-password',
         try {
             const { currentPassword, newPassword, confirmPassword, refreshToken } = req.body;
 
-            if (!currentPassword || !newPassword || !confirmPassword) {
+            // currentPassword e cerut doar pentru conturile care AU parolă (mai jos).
+            if (!newPassword || !confirmPassword) {
                 return res.status(400).json({ success: false, message: "Toate câmpurile sunt obligatorii." });
             }
 
@@ -859,16 +935,20 @@ userRoute.put('/api/user/change-password',
             const user = await users.findById(req.user.id);
             if (!user) return res.status(404).json({ success: false, message: "Utilizator negăsit." });
 
-            // Verificăm parola curentă
-            const isMatch = await compareString(currentPassword, user.password);
-            if (!isMatch) {
-                return res.status(400).json({ success: false, message: "Parola curentă este incorectă." });
-            }
-
-            // Verificăm să nu fie identică cu cea veche
-            const isSame = await compareString(newPassword, user.password);
-            if (isSame) {
-                return res.status(400).json({ success: false, message: "Noua parolă nu poate fi identică cu cea actuală." });
+            // Conturile CU parolă: verificăm parola curentă + să nu fie identică.
+            // Conturile OAuth (fără parolă) ajung aici doar dacă își setează prima parolă → sărim verificarea.
+            if (user.password) {
+                if (!currentPassword) {
+                    return res.status(400).json({ success: false, message: "Parola curentă este obligatorie." });
+                }
+                const isMatch = await compareString(currentPassword, user.password);
+                if (!isMatch) {
+                    return res.status(400).json({ success: false, message: "Parola curentă este incorectă." });
+                }
+                const isSame = await compareString(newPassword, user.password);
+                if (isSame) {
+                    return res.status(400).json({ success: false, message: "Noua parolă nu poate fi identică cu cea actuală." });
+                }
             }
 
             // Hash + salvare
@@ -903,20 +983,29 @@ userRoute.delete('/api/user/delete-account',
         try {
             const { password } = req.body;
 
-            if (!password) {
-                return res.status(400).json({ success: false, message: "Parola este necesară pentru confirmare." });
-            }
-
             const user = await users.findById(req.user.id);
             if (!user) return res.status(404).json({ success: false, message: "Utilizator negăsit." });
 
-            // Verificare parolă
-            const isMatch = await compareString(password, user.password);
-            if (!isMatch) {
-                return res.status(400).json({ success: false, message: "Parola este incorectă." });
+            // Conturile OAuth (Apple/Google) n-au parolă → confirmarea prin parolă nu se aplică.
+            // Userul e deja autentificat prin access token (authUser) = dovadă suficientă de identitate.
+            // (Obligatoriu pentru App Store: userii Apple TREBUIE să-și poată șterge contul.)
+            if (user.password) {
+                if (!password) {
+                    return res.status(400).json({ success: false, message: "Parola este necesară pentru confirmare." });
+                }
+                const isMatch = await compareString(password, user.password);
+                if (!isMatch) {
+                    return res.status(400).json({ success: false, message: "Parola este incorectă." });
+                }
             }
 
             const userId = req.user.id;
+
+            // ──────────────────────────────────────────────
+            // 0. APPLE: revocăm token-ul (best-effort) înainte de a șterge orice.
+            //    Cerință Apple pentru Sign in with Apple la ștergerea contului.
+            // ──────────────────────────────────────────────
+            await revokeAppleToken(user.appleRefreshToken);
 
             // ──────────────────────────────────────────────
             // 1. SALES: Stripe cancel + R2 cleanup + delete
