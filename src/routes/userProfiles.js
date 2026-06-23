@@ -69,6 +69,26 @@ async function deleteFromR2(publicUrl) {
 }
 
 
+// --- VERIFICARE NUDITATE (sidecar NudeNet, pe localhost) ---
+const NUDENET_URL = process.env.NUDENET_URL || 'http://127.0.0.1:5000';
+
+// Trimite buffer-ul imaginii la sidecarul NudeNet și întoarce { nudity, hits, all, ms }.
+// Aruncă dacă sidecarul nu răspunde sau depășește timeout-ul → tratat ca fail-closed în rută.
+async function checkNudity(buffer, filename = 'avatar.jpg') {
+    const form = new FormData(); // FormData / Blob sunt globale în Node 20
+    form.append('file', new Blob([buffer], { type: 'image/jpeg' }), filename);
+
+    const resp = await fetch(`${NUDENET_URL}/check`, {
+        method: 'POST',
+        body: form,
+        signal: AbortSignal.timeout(15000), // dacă sidecarul atârnă, nu blocăm request-ul la infinit
+    });
+
+    if (!resp.ok) throw new Error(`NudeNet status ${resp.status}`);
+    return resp.json();
+}
+
+
 const DEFAULT_AVATAR = "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
 
 const uploadAvatar = (req, res, next) => {
@@ -257,6 +277,31 @@ userProfiles.put('/api/user/profile', authUser, fetchLimiter, async (req, res) =
 userProfiles.post('/api/user/avatar', authUser, fetchLimiter, uploadAvatar, async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ success: false, message: "Lipsește imaginea." });
+
+        // ─── VERIFICARE NUDITATE (înainte de orice DB / upload R2) ───
+        // Verificăm originalul (req.file.buffer), nu varianta 200x200 — detectorul are mai mult de lucru.
+        let verdict;
+        try {
+            verdict = await checkNudity(req.file.buffer, req.file.originalname);
+        } catch (e) {
+            console.error('❌ NudeNet indisponibil:', e.message);
+            // fail-CLOSED: dacă nu putem verifica, refuzăm (corect pentru un gate de moderare).
+            // PM2 ține sidecarul pornit; dacă preferi disponibilitate peste strictețe,
+            // înlocuiește acest return cu un console.warn și lasă fluxul să continue.
+            return res.status(503).json({
+                success: false,
+                code: 'MODERATION_UNAVAILABLE',
+                message: "Verificarea imaginii e indisponibilă momentan. Încearcă din nou."
+            });
+        }
+        if (verdict.nudity) {
+            return res.status(400).json({
+                success: false,
+                code: 'NUDITY_DETECTED',
+                message: "Imaginea pare să conțină nuditate. Alege altă poză."
+            });
+        }
+        // ─────────────────────────────────────────────────────────────
 
         const currentUser = await users.findById(req.user.id);
         if (!currentUser) return res.status(404).json({ success: false, message: "Utilizator negăsit." });
