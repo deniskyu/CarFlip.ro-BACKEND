@@ -29,6 +29,22 @@ module.exports = {
             },
             autorestart: true,
             watch: false,
+        },
+        {
+            name: 'nudenet',
+            // Pornim uvicorn prin Python-ul DIN venv — așa importurile (nudenet, cv2) merg.
+            script: 'venv/bin/python3',
+            args: '-m uvicorn nudenet_service:app --host 127.0.0.1 --port 5000',
+            cwd: './nudenet-service',   // rulează din folderul sidecarului; pune cale absolută dacă pm2 se plânge
+            interpreter: 'none',        // ← CRITIC: scriptul e deja Python, nu-l rula prin Node
+            instances: 1,
+            exec_mode: 'fork',
+            max_memory_restart: '1500M',
+            autorestart: true,
+            watch: false,
+            env: {
+                NODE_ENV: 'production'
+            },
         }
     ]
 };
