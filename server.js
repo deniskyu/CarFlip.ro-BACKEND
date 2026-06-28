@@ -41,7 +41,7 @@ app.use('/.well-known', express.static(path.join(process.cwd(), 'public/.well-kn
 
 app.use(express.json());
 
-const version = 3;
+const version = 2;
 
 app.get('/api/app/version', (req, res) => {
     res.status(200).json({
