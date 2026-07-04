@@ -32,7 +32,12 @@ const r2 = new S3Client({
 });
 
 function deleteFromR2(publicUrl) {
-    if (!publicUrl || publicUrl.includes('gravatar') || !publicUrl.includes(process.env.R2_PUBLIC_DOMAIN)) return;
+    if (
+        !publicUrl ||
+        publicUrl.includes('splash_logo') ||   // noul default partajat — nu-l ștergem NICIODATĂ
+        publicUrl.includes('gravatar') ||       // vechiul default (useri legacy)
+        !publicUrl.includes(process.env.R2_PUBLIC_DOMAIN)
+    ) return;
     try {
         const key = publicUrl.split('/').pop();
         const command = new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key });
@@ -87,7 +92,7 @@ const resolveGoogleUser = async ({ googleId, email, name, picture }) => {
             // Cont verificat: deținerea inboxului a fost dovedită cândva prin OTP.
             // Google confirmă același inbox → aceeași persoană. Atașăm googleId.
             user.googleId = googleId;
-            if (picture && (!user.icon || user.icon.includes('gravatar'))) {
+            if (picture && (!user.icon || user.icon.includes('gravatar') || user.icon.includes('splash_logo'))) {
                 user.icon = picture;
             }
         } else {

@@ -14,7 +14,7 @@ const seenPostSchema = new mongoose.Schema({
     createdAt: {
         type: Date,
         default: Date.now,
-        expires: 2592000 
+        expires: 7776000,
     }
 });
 

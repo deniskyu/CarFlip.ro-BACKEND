@@ -58,7 +58,12 @@ async function uploadToR2(file) {
 }
 
 async function deleteFromR2(publicUrl) {
-    if (!publicUrl || publicUrl.includes('gravatar') || !publicUrl.includes(process.env.R2_PUBLIC_DOMAIN)) return;
+    if (
+        !publicUrl ||
+        publicUrl.includes('splash_logo') ||   // noul default partajat — nu-l ștergem NICIODATĂ
+        publicUrl.includes('gravatar') ||       // vechiul default (useri legacy)
+        !publicUrl.includes(process.env.R2_PUBLIC_DOMAIN)
+    ) return;
     try {
         const key = publicUrl.split('/').pop(); 
         const command = new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key });
@@ -89,7 +94,7 @@ async function checkNudity(buffer, filename = 'avatar.jpg') {
 }
 
 
-const DEFAULT_AVATAR = "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
+const DEFAULT_AVATAR = "https://media.car-flip.com/splash_logo.jpg";
 
 const uploadAvatar = (req, res, next) => {
     upload.single('avatar')(req, res, (err) => {

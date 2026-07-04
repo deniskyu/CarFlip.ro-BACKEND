@@ -1488,7 +1488,7 @@ userActions.post('/api/sales/comment', authUser, fetchLimiter, async (req, res) 
         const senderData = {
             id: currentUserId,
             name: currentUsername,
-            image: currentUserData?.icon || "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y" // Fallback de siguranță
+            image: currentUserData?.icon || "https://media.car-flip.com/splash_logo.jpg" // Fallback de siguranță
         };
 
         // CAZUL A: Este un RĂSPUNS la un alt comentariu (Reply)

@@ -74,7 +74,7 @@ const userSchema = new mongoose.Schema({
     // --- ICONIȚA / AVATARUL ---
     icon: {
         type: String,
-        default: "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
+        default: "https://media.car-flip.com/splash_logo.jpg"
     },
     metaData:{
         type: Object,
