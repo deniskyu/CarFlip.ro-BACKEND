@@ -10,6 +10,7 @@ import process from 'process';
 import Conversation from '../models/conversationModel.js';
 import Message from '../models/messageModel.js';
 import { sendAndSaveNotification } from '../services/notificationService.js';
+import { subMonths } from 'date-fns';
 
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -202,14 +203,19 @@ const startCronJobs = () => {
         }
     }, { scheduled: true, timezone: 'Europe/Bucharest' });
 
-    // ─── Adaugă 2 views fiecărui anunț activ, din oră în oră ─────────────
+// ─── Adaugă 2 views doar anunțurilor active mai noi de 3 luni ─────────
     cron.schedule('0 * * * *', async () => {
         try {
+            const threeMonthsAgo = subMonths(new Date(), 3);
             const result = await sales.updateMany(
-                { is_active: true },
-                { $inc: { views: 3 } },
-                { timestamps: false }   // nu bruiem updatedAt cu views sintetice
+                {
+                    is_active: true,
+                    createdAt: { $gte: threeMonthsAgo }   // ← doar cele din ultimele 3 luni
+                },
+                { $inc: { views: 2 } },
+                { timestamps: false }
             );
+            console.log(`👁️ Views +2 la ${result.modifiedCount} anunțuri active (<3 luni).`);
         } catch (err) {
             console.error('❌ Eroare cron adăugare views:', err);
         }
