@@ -207,10 +207,9 @@ const startCronJobs = () => {
         try {
             const result = await sales.updateMany(
                 { is_active: true },
-                { $inc: { views: 2 } },
+                { $inc: { views: 3 } },
                 { timestamps: false }   // nu bruiem updatedAt cu views sintetice
             );
-            console.log(`👁️ Views +2 adăugate la ${result.modifiedCount} anunțuri active.`);
         } catch (err) {
             console.error('❌ Eroare cron adăugare views:', err);
         }
