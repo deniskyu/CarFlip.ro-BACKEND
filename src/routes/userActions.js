@@ -155,7 +155,7 @@ userActions.post('/api/sale/post/free',
 
             // ── Date plată: gratuit, 3 luni, media_processing ────────
             const now = new Date();
-            const paidUntil = addMonths(now, 3);
+            const paidUntil = addMonths(now, 6);
             const expiresAt = addDays(paidUntil, 10);
 
             // ── Creare anunț (identic, fără Stripe) ──────────────────
@@ -1907,7 +1907,7 @@ userActions.post('/api/sales/reactivate/:id', authUser, fetchLimiter, async (req
         }*/
 
         const now = new Date();
-        const paidUntil = addMonths(now, 3); // 3 luni
+        const paidUntil = addMonths(now, 6); // 3 luni
         const expiresAt = addDays(paidUntil, 10); // 2 luni 10 zile
 
         sale.is_active = true;

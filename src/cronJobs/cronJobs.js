@@ -201,6 +201,21 @@ const startCronJobs = () => {
             console.error('❌ Eroare cron chat cleanup:', err);
         }
     }, { scheduled: true, timezone: 'Europe/Bucharest' });
+
+    // ─── Adaugă 2 views fiecărui anunț activ, din oră în oră ─────────────
+    cron.schedule('0 * * * *', async () => {
+        try {
+            const result = await sales.updateMany(
+                { is_active: true },
+                { $inc: { views: 2 } },
+                { timestamps: false }   // nu bruiem updatedAt cu views sintetice
+            );
+            console.log(`👁️ Views +2 adăugate la ${result.modifiedCount} anunțuri active.`);
+        } catch (err) {
+            console.error('❌ Eroare cron adăugare views:', err);
+        }
+    }, { scheduled: true, timezone: 'Europe/Bucharest' });
+
 };
 
 export default startCronJobs;
