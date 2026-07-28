@@ -212,7 +212,7 @@ const startCronJobs = () => {
                     is_active: true,
                     createdAt: { $gte: threeMonthsAgo }   // ← doar cele din ultimele 3 luni
                 },
-                { $inc: { views: 2 } },
+                { $inc: { views: 1 } },
                 { timestamps: false }
             );
             console.log(`👁️ Views +2 la ${result.modifiedCount} anunțuri active (<3 luni).`);
