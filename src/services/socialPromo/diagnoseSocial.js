@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 dotenv.config();
 
-import sales from '../models/salesModel.js';
+import sales from '../../models/salesModel.js';
 
 const line = (s = '') => console.log(s);
 const ok = (s) => console.log(`  ✅ ${s}`);
