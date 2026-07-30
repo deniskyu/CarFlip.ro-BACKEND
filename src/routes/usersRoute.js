@@ -20,6 +20,8 @@ import { OAuth2Client } from 'google-auth-library';
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 import appleSignin from 'apple-signin-auth';
 
+import { enqueueSocialCleanup } from '../services/socialPromo/socialPromoService.js';
+
 
 // Configurare R2 (copiază din userProfiles dacă nu e deja partajat)
 const r2 = new S3Client({
@@ -1026,6 +1028,8 @@ userRoute.delete('/api/user/delete-account',
                         console.warn(`[Delete] Stripe skip (${sale.stripe_subscription_id}):`, err.message);
                     }
                 }*/
+
+                await enqueueSocialCleanup(sale);
 
                 if (sale.media && sale.media.length > 0) {
                     for (const file of sale.media) {

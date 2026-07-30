@@ -11,6 +11,8 @@ import Conversation from '../models/conversationModel.js';
 import Message from '../models/messageModel.js';
 import { sendAndSaveNotification } from '../services/notificationService.js';
 import { subMonths } from 'date-fns';
+import { enqueueSocialCleanupMany, dispatchSocialQueue, drainSocialCleanup } from '../services/socialPromo/socialPromoService.js';
+
 
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -108,6 +110,7 @@ const startCronJobs = () => {
             });
 
             if (salesToDelete.length > 0) {
+                await enqueueSocialCleanupMany(salesToDelete);
                 const mediaToDelete = [];
                 const saleIdsToDelete = [];
                 //const stripeSubsToCancel = [];
@@ -221,6 +224,24 @@ const startCronJobs = () => {
         }
     }, { scheduled: true, timezone: 'Europe/Bucharest' });
 
+
+    cron.schedule('*/5 * * * *', async () => {
+        try {
+            await dispatchSocialQueue();
+        } catch (err) {
+            console.error('❌ Eroare cron social dispatch:', err.message);
+        }
+    }, { scheduled: true, timezone: 'Europe/Bucharest' });
+
+
+    cron.schedule('*/15 * * * *', async () => {
+        try {
+            await drainSocialCleanup();
+        } catch (err) {
+            console.error('❌ Eroare cron social cleanup:', err.message);
+        }
+    }, { scheduled: true, timezone: 'Europe/Bucharest' });
+    
 };
 
 export default startCronJobs;

@@ -59,6 +59,26 @@ const saleSchema = new mongoose.Schema({
         liked_at: { type: Date, default: Date.now }
     }],
     allow_comments: { type: Boolean, default: true },
+    social_promo: {
+        facebook: {
+            status: { type: String, enum: ['pending', 'posting', 'posted', 'failed', 'skipped'], default: 'pending' },
+            zernio_post_id: { type: String, default: null },
+            posted_at: { type: Date, default: null },
+            claimed_at: { type: Date, default: null },
+            retry_after: { type: Date, default: null },
+            attempts: { type: Number, default: 0 },
+            last_error: { type: String, default: null },
+        },
+        tiktok: {
+            status: { type: String, enum: ['pending', 'posting', 'posted', 'failed', 'skipped'], default: 'pending' },
+            zernio_post_id: { type: String, default: null },
+            posted_at: { type: Date, default: null },
+            claimed_at: { type: Date, default: null },
+            retry_after: { type: Date, default: null },
+            attempts: { type: Number, default: 0 },
+            last_error: { type: String, default: null },
+        },
+    },
     comments_count: { type: Number, default: 0 },
     is_active: { type: Boolean, default: false },
     is_promoted: { type: Boolean, default: false },
@@ -90,6 +110,10 @@ saleSchema.index({ user_id: 1, _id: -1 });   // ← pentru my-posts
 saleSchema.index({ "liked_by.user_id": 1 });  // ← pentru liked aggregation
 saleSchema.index({ is_active: 1, likes_count: -1, _id: -1 }); // ← pentru search
 saleSchema.index({ is_active: 1, "location.county": 1, _id: -1 }); // ← pentru Tier A (feed pe județ)
+saleSchema.index({ "social_promo.facebook.posted_at": -1 });
+saleSchema.index({ "social_promo.tiktok.posted_at": -1 });
+saleSchema.index({ allow_social_promo: 1, is_active: 1, status: 1, "social_promo.facebook.status": 1, createdAt: 1 });
+saleSchema.index({ allow_social_promo: 1, is_active: 1, status: 1, "social_promo.tiktok.status": 1, createdAt: 1 });
 
 const sales = mongoose.models.sales || mongoose.model("sales", saleSchema);
 export default sales;

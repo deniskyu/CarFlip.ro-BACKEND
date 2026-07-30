@@ -16,6 +16,7 @@ import { triggerSearchAlerts } from './searchAlertsRoute.js';
 import { addMediaToQueue } from '../mediaProcessing/mediaQueue.js'; // <--- NOU: Legătura cu Coada
 import { sendAndSaveNotification } from '../services/notificationService.js';
 import { addMediaUpdateToQueue } from '../mediaProcessing/mediaQueue.js';
+import { enqueueSocialCleanup } from '../services/socialPromo/socialPromoService.js';
 //import Stripe from 'stripe';
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -82,7 +83,7 @@ userActions.post('/api/sale/post/free',
                 registration_status, exchange_accepted, for_dismante,
                 phone_number, description,
                 vin, steering_wheel, negotiable, allow_comments,
-                media_metadata, title, horsepower
+                media_metadata, title, horsepower, allow_social_promo
             } = req.body;
 
             // ── Parsare metadata zoom ─────────────────────────────────
@@ -189,6 +190,7 @@ userActions.post('/api/sale/post/free',
                 views: 0,
                 comments_count: 0,
                 allow_comments: allow_comments !== undefined ? String(allow_comments) === 'true' : true,
+                allow_social_promo: String(allow_social_promo) === 'true',
                 // Gratuit: media_processing → worker-ul îl face active când termină
                 is_active: false,
                 status: 'media_processing',
@@ -1825,6 +1827,8 @@ userActions.delete('/api/sales/remove/:id', authUser, fetchLimiter, async (req, 
         await Comments.deleteMany({ sale_id: id });
         await SeenPost.deleteMany({ sale_id: id });
 
+        await enqueueSocialCleanup(sale);
+
         // 6. Lovitura de grație: Ștergem anunțul propriu-zis
         await sales.findByIdAndDelete(id);
 
@@ -3250,6 +3254,28 @@ userActions.get('/api/sales/search-list', authUser, fetchLimiter, async (req, re
     }
 });
 
+
+
+userActions.get('/get-app', (req, res) => {
+    
+  const playStore = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe';
+  const appStore = 'https://apps.apple.com/ro/app/id6760683057';
+  // Preluăm User-Agent-ul; folosim un string gol ca fallback pentru siguranță
+  const userAgent = req.headers['user-agent'] || '';
+
+  // Verificăm dacă este dispozitiv Apple (iPhone, iPad, iPod)
+  if (/iPad|iPhone|iPod/i.test(userAgent)) {
+    return res.redirect(appStore);
+  }
+
+  // Verificăm dacă este dispozitiv Android
+  if (/android/i.test(userAgent)) {
+    return res.redirect(playStore);
+  }
+
+  // Fallback pentru desktop/web sau orice alt sistem de operare nerecunoscut
+  return res.redirect('/');
+});
 
 
 export default userActions;
