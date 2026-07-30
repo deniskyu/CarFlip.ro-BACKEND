@@ -1,5 +1,5 @@
-import sales from '../models/salesModel.js';
-import SocialCleanup from '../models/socialCleanupModel.js';
+import sales from '../../models/salesModel.js';
+import SocialCleanup from '../../models/socialCleanupModel.js';
 import { buildCaptions } from './captions.js';
 import {
     SOCIAL_ENABLED,

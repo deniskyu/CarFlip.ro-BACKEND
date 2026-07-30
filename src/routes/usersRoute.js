@@ -19,7 +19,7 @@ import { OAuth2Client } from 'google-auth-library';
 //import Stripe from 'stripe';
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 import appleSignin from 'apple-signin-auth';
-
+import { enqueueSocialCleanup } from '../services/socialPromo/socialPromoService.js';
 
 // Configurare R2 (copiază din userProfiles dacă nu e deja partajat)
 const r2 = new S3Client({
@@ -1019,6 +1019,7 @@ userRoute.delete('/api/user/delete-account',
             const saleIds = userSales.map(s => s._id);
 
             for (const sale of userSales) {
+                await enqueueSocialCleanup(sale);
                 /*if (sale.stripe_subscription_id) {
                     try {
                         await stripe.subscriptions.cancel(sale.stripe_subscription_id);
