@@ -59,6 +59,7 @@ const saleSchema = new mongoose.Schema({
         liked_at: { type: Date, default: Date.now }
     }],
     allow_comments: { type: Boolean, default: true },
+    allow_social_promo: { type: Boolean, default: false },
     social_promo: {
         facebook: {
             status: { type: String, enum: ['pending', 'posting', 'posted', 'failed', 'skipped'], default: 'pending' },
