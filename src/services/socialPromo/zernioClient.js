@@ -11,6 +11,9 @@ export const FB_ACCOUNT_ID = process.env.ZERNIO_FB_ACCOUNT_ID || null;
 export const TT_ACCOUNT_ID = process.env.ZERNIO_TT_ACCOUNT_ID || null;
 const FB_PAGE_ID = process.env.ZERNIO_FB_PAGE_ID || null;
 
+// Coduri HTTP care înseamnă "încearcă mai târziu", nu "conținutul e greșit".
+const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504, 507, 522, 524]);
+
 export const isConfigured = (platform) => {
     if (!SOCIAL_ENABLED || !API_KEY) return false;
     if (platform === 'facebook') return !!FB_ACCOUNT_ID;
@@ -19,7 +22,11 @@ export const isConfigured = (platform) => {
 };
 
 const request = async (method, path, body = null) => {
-    if (!API_KEY) throw new Error('ZERNIO_NOT_CONFIGURED: lipsește ZERNIO_API_KEY');
+    if (!API_KEY) {
+        const e = new Error('ZERNIO_NOT_CONFIGURED: lipsește ZERNIO_API_KEY');
+        e.retryable = false;
+        throw e;
+    }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -43,13 +50,24 @@ const request = async (method, path, body = null) => {
             const msg = json?.error || json?.message || text || `HTTP ${res.status}`;
             const err = new Error(`ZERNIO_${res.status}: ${String(msg).slice(0, 300)}`);
             err.status = res.status;
+            err.retryable = RETRYABLE_STATUS.has(res.status);
             throw err;
         }
 
         return json;
     } catch (err) {
+        // Timeout: cererea poate să fi ajuns la platformă. Nu e sigur nici că a
+        // reușit, nici că a eșuat — marcat separat, ca apelantul să NU reia orb.
         if (err.name === 'AbortError') {
-            throw new Error(`ZERNIO_TIMEOUT: ${method} ${path} a depășit ${REQUEST_TIMEOUT_MS}ms`);
+            const e = new Error(`ZERNIO_TIMEOUT: ${method} ${path} a depășit ${REQUEST_TIMEOUT_MS}ms`);
+            e.timeout = true;
+            e.retryable = true;
+            throw e;
+        }
+        // Eroare de rețea (fetch a aruncat înainte de a primi un status).
+        if (err.status === undefined && err.retryable === undefined) {
+            err.retryable = true;
+            err.network = true;
         }
         throw err;
     } finally {
@@ -75,7 +93,11 @@ export const postToFacebook = async ({ imageUrls, caption, firstComment }) => {
 
     const data = await request('POST', '/posts', body);
     const postId = data?.post?._id || data?.post?.id || null;
-    if (!postId) throw new Error('ZERNIO_NO_POST_ID: răspuns fără post._id (Facebook)');
+    if (!postId) {
+        const e = new Error('ZERNIO_NO_POST_ID: răspuns fără post._id (Facebook)');
+        e.retryable = false;
+        throw e;
+    }
     return postId;
 };
 
@@ -102,7 +124,11 @@ export const postToTikTok = async ({ imageUrls, title, description }) => {
 
     const data = await request('POST', '/posts', body);
     const postId = data?.post?._id || data?.post?.id || null;
-    if (!postId) throw new Error('ZERNIO_NO_POST_ID: răspuns fără post._id (TikTok)');
+    if (!postId) {
+        const e = new Error('ZERNIO_NO_POST_ID: răspuns fără post._id (TikTok)');
+        e.retryable = false;
+        throw e;
+    }
     return postId;
 };
 

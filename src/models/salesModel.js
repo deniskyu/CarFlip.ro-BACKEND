@@ -1,5 +1,21 @@
 import mongoose from "mongoose";
 
+const socialPlatformState = {
+    status: {
+        type: String,
+        enum: ['pending', 'posting', 'posted', 'failed', 'skipped', 'unknown'],
+        default: 'pending'
+    },
+    zernio_post_id: { type: String, default: null },
+    posted_at: { type: Date, default: null },
+    claimed_at: { type: Date, default: null },
+    retry_after: { type: Date, default: null },
+    attempts: { type: Number, default: 0 },
+    temp_failures: { type: Number, default: 0 },
+    revivals: { type: Number, default: 0 },
+    last_error: { type: String, default: null },
+};
+
 const saleSchema = new mongoose.Schema({
     user_id: {
         type: mongoose.Schema.Types.ObjectId,
@@ -61,24 +77,8 @@ const saleSchema = new mongoose.Schema({
     allow_comments: { type: Boolean, default: true },
     allow_social_promo: { type: Boolean, default: false },
     social_promo: {
-        facebook: {
-            status: { type: String, enum: ['pending', 'posting', 'posted', 'failed', 'skipped'], default: 'pending' },
-            zernio_post_id: { type: String, default: null },
-            posted_at: { type: Date, default: null },
-            claimed_at: { type: Date, default: null },
-            retry_after: { type: Date, default: null },
-            attempts: { type: Number, default: 0 },
-            last_error: { type: String, default: null },
-        },
-        tiktok: {
-            status: { type: String, enum: ['pending', 'posting', 'posted', 'failed', 'skipped'], default: 'pending' },
-            zernio_post_id: { type: String, default: null },
-            posted_at: { type: Date, default: null },
-            claimed_at: { type: Date, default: null },
-            retry_after: { type: Date, default: null },
-            attempts: { type: Number, default: 0 },
-            last_error: { type: String, default: null },
-        },
+        facebook: socialPlatformState,
+        tiktok: socialPlatformState,
     },
     comments_count: { type: Number, default: 0 },
     is_active: { type: Boolean, default: false },

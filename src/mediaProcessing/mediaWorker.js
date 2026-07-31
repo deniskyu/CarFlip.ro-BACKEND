@@ -204,6 +204,19 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
                 { new: true }
             );
 
+            try {
+                await sales.updateOne(
+                    { _id: saleId, 'social_promo.facebook.status': 'skipped' },
+                    { $set: { 'social_promo.facebook.status': 'pending', 'social_promo.facebook.last_error': null, 'social_promo.facebook.retry_after': null } }
+                );
+                await sales.updateOne(
+                    { _id: saleId, 'social_promo.tiktok.status': 'skipped' },
+                    { $set: { 'social_promo.tiktok.status': 'pending', 'social_promo.tiktok.last_error': null, 'social_promo.tiktok.retry_after': null } }
+                );
+            } catch (e) {
+                console.warn(`⚠️ Nu am putut reseta starea de promovare pentru ${saleId}:`, e.message);
+            }
+
             // ── Ștergem pozele vechi din R2 DOAR după ce swap-ul în DB a reușit ──
             for (const publicId of oldPublicIds) {
                 await s3.send(new DeleteObjectCommand({

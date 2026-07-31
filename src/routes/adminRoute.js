@@ -6,6 +6,7 @@ import { rateLimit } from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
 import Redis from "ioredis";
 import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
+
 import admins from "../models/adminModel.js";
 import users from "../models/userModel.js";
 import Reports from "../models/reportModel.js";
@@ -15,6 +16,8 @@ import Message from "../models/messageModel.js";
 import SeenPost from "../models/seenPostsModel.js";
 import brands from "../models/brandsModel.js";
 import automobiles from "../models/automobilesModel.js";
+import { enqueueSocialCleanup } from "../services/socialPromo/socialPromoService.js";
+
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -115,9 +118,9 @@ export const authAdmin = (req, res, next) => {
 const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 // ===================== AUTH =====================
-
 adminRoute.post("/api/admin/login", adminLoginLimiter, async (req, res) => {
     const { email, password } = req.body;
+
     // Type guards -> blochează NoSQL injection ({ $ne: ... } etc.)
     if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password)
         return res.status(400).json({ success: false, message: "Câmpurile sunt obligatorii." });
@@ -147,9 +150,9 @@ adminRoute.get("/api/admin/verify", adminFetchLimiter, authAdmin, (req, res) => 
 });
 
 // ===================== USER SEARCH + BAN/UNBAN =====================
-
 adminRoute.get("/api/admin/user/search", adminFetchLimiter, authAdmin, async (req, res) => {
     const { username } = req.query;
+
     // qs poate parsa ?username[$ne]= într-un obiect -> type guard obligatoriu.
     if (typeof username !== "string" || !username.trim())
         return res.status(400).json({ success: false, message: "Username obligatoriu." });
@@ -196,7 +199,6 @@ adminRoute.put("/api/admin/user/ban/:userId", adminFetchLimiter, authAdmin, asyn
 });
 
 // ===================== REPORTS =====================
-
 adminRoute.get("/api/admin/reports", adminFetchLimiter, authAdmin, async (req, res) => {
     try {
         const reports = await Reports.find({ status: "pending" }).sort({ createdAt: -1 }).lean();
@@ -258,6 +260,7 @@ adminRoute.put("/api/admin/reports/:reportId", adminFetchLimiter, authAdmin, asy
 
     if (!isValidObjectId(reportId))
         return res.status(400).json({ success: false, message: "ID raport invalid." });
+
     if (typeof status !== "string" || !["resolved", "dismissed"].includes(status))
         return res.status(400).json({ success: false, message: "Status invalid." });
 
@@ -267,6 +270,7 @@ adminRoute.put("/api/admin/reports/:reportId", adminFetchLimiter, authAdmin, asy
             { status },
             { new: true }
         );
+
         if (!report) return res.status(404).json({ success: false, message: "Raportul nu a fost găsit." });
 
         return res.json({ success: true, message: `Raportul a fost marcat ca ${status}.`, report });
@@ -285,6 +289,7 @@ adminRoute.put("/api/admin/reports/:reportId", adminFetchLimiter, authAdmin, asy
 // ──────────────────────────────────────────────────────────────────────────
 adminRoute.post("/api/admin/reports/:reportId/action", adminActionLimiter, authAdmin, async (req, res) => {
     const { reportId } = req.params;
+
     if (!isValidObjectId(reportId))
         return res.status(400).json({ success: false, message: "ID raport invalid." });
 
@@ -307,11 +312,18 @@ adminRoute.post("/api/admin/reports/:reportId/action", adminActionLimiter, authA
                     if (Array.isArray(sale.media)) {
                         await Promise.all(sale.media.map((file) => deleteFromR2(file?.public_id)));
                     }
+
                     // 2. Curățenie orfani
                     await Comments.deleteMany({ sale_id: sale._id });
                     await SeenPost.deleteMany({ sale_id: sale._id });
-                    // 3. Anunțul
+
+                    // 3. Postarea de pe rețelele sociale — ÎNAINTE de ștergerea
+                    //    documentului, altfel se pierde zernio_post_id-ul.
+                    await enqueueSocialCleanup(sale);
+
+                    // 4. Anunțul
                     await sales.deleteOne({ _id: sale._id });
+
                     resultMessage = "Anunțul a fost șters și raportul închis.";
                 } else {
                     resultMessage = "Anunțul nu mai există. Raportul a fost închis.";
@@ -379,7 +391,6 @@ adminRoute.post("/api/admin/reports/:reportId/action", adminActionLimiter, authA
 });
 
 // ===================== BRANDS =====================
-
 adminRoute.get("/api/admin/brands", adminFetchLimiter, authAdmin, async (req, res) => {
     try {
         const allBrands = await brands.find().sort({ name: 1 }).lean();
@@ -431,7 +442,6 @@ adminRoute.delete("/api/admin/brands/:brandId", adminFetchLimiter, authAdmin, as
 });
 
 // ===================== AUTOMOBILES =====================
-
 adminRoute.get("/api/admin/brands/:brandId/automobiles", adminFetchLimiter, authAdmin, async (req, res) => {
     const brandId = parseInt(req.params.brandId, 10);
     if (!Number.isInteger(brandId))
@@ -482,6 +492,7 @@ adminRoute.delete("/api/admin/automobiles/:automobileId", adminFetchLimiter, aut
         if (!automobile) return res.status(404).json({ success: false, message: "Modelul nu a fost găsit." });
 
         await automobiles.deleteOne({ id: automobile.id });
+
         return res.json({ success: true, message: `Modelul "${automobile.name}" a fost șters.` });
     } catch (err) {
         console.error("Admin delete automobile error:", err);
@@ -490,7 +501,6 @@ adminRoute.delete("/api/admin/automobiles/:automobileId", adminFetchLimiter, aut
 });
 
 // ===================== INFO / STATS =====================
-
 adminRoute.get("/api/admin/stats", adminFetchLimiter, authAdmin, async (req, res) => {
     try {
         const [totalSales, totalUsers] = await Promise.all([
@@ -504,6 +514,5 @@ adminRoute.get("/api/admin/stats", adminFetchLimiter, authAdmin, async (req, res
         return res.status(500).json({ success: false, message: "Eroare server." });
     }
 });
-
 
 export default adminRoute;

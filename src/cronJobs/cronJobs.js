@@ -11,8 +11,12 @@ import Conversation from '../models/conversationModel.js';
 import Message from '../models/messageModel.js';
 import { sendAndSaveNotification } from '../services/notificationService.js';
 import { subMonths } from 'date-fns';
-import { enqueueSocialCleanupMany, dispatchSocialQueue, drainSocialCleanup } from '../services/socialPromo/socialPromoService.js';
-
+import {
+    enqueueSocialCleanupMany,
+    dispatchSocialQueue,
+    drainSocialCleanup,
+    reportSocialHealth,
+} from '../services/socialPromo/socialPromoService.js';
 
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -55,7 +59,6 @@ const cleanOldTempFiles = async (folderPath) => {
     }
 };
 
-
 const startCronJobs = () => {
     // Rulează DOAR pe procesul 0 din cluster
     if (process.env.NODE_APP_INSTANCE !== '0' && process.env.NODE_APP_INSTANCE !== undefined) {
@@ -76,7 +79,7 @@ const startCronJobs = () => {
                 { $set: { is_active: false, status: 'grace_period' } }
             );
 
-                        // Notificăm proprietarii anunțurilor trecute în grace period
+            // Notificăm proprietarii anunțurilor trecute în grace period
             if (graceResult.modifiedCount > 0) {
                 const graceSales = await sales.find({
                     status: 'grace_period',
@@ -96,7 +99,7 @@ const startCronJobs = () => {
                         null
                     );
                 }
-                console.log(`📢 ${graceSales.length} notificări grace period trimise.`);
+                console.log(`📨 ${graceSales.length} notificări grace period trimise.`);
             }
 
             // 2. Identificare anunțuri de șters (Fatality)
@@ -111,6 +114,7 @@ const startCronJobs = () => {
 
             if (salesToDelete.length > 0) {
                 await enqueueSocialCleanupMany(salesToDelete);
+
                 const mediaToDelete = [];
                 const saleIdsToDelete = [];
                 //const stripeSubsToCancel = [];
@@ -135,7 +139,7 @@ const startCronJobs = () => {
                 if (mediaToDelete.length > 0) {
                     const chunks = chunkArray(mediaToDelete, 50);
                     for (const chunk of chunks) {
-                        await Promise.all(chunk.map(id => 
+                        await Promise.all(chunk.map(id =>
                             r2.send(new DeleteObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: id })).catch(() => {})
                         ));
                     }
@@ -162,14 +166,14 @@ const startCronJobs = () => {
     // Curăță conversațiile rămase fără niciun mesaj (orfane după TTL MongoDB)
     cron.schedule('50 3 * * *', async () => {
         try {
-        // ─── Curățare imagini chat din R2 ────────────────────────────────────
+            // ─── Curățare imagini chat din R2 ────────────────────────────────────
             const now = new Date();
             const expiredImages = await Message.find({
                 type: 'image',
                 expires_at: { $lte: now },
                 image_public_id: { $ne: null }
             }).select('image_public_id').lean();
-    
+
             if (expiredImages.length > 0) {
                 const imgChunks = chunkArray(expiredImages.map(m => m.image_public_id), 50);
                 for (const chunk of imgChunks) {
@@ -182,34 +186,36 @@ const startCronJobs = () => {
                 }
                 console.log(`✅ Imagini chat expirate șterse din R2: ${expiredImages.length}`);
             }
-    
+
             const deletedMessages = await Message.deleteMany({ expires_at: { $lte: now } });
             console.log(`✅ Mesaje expirate șterse din DB: ${deletedMessages.deletedCount}`);
             // ─────────────────────────────────────────────────────────────────────
-    
+
             const allConversations = await Conversation.find({}).select('_id').lean();
             const withMessagesResult = await Message.aggregate([
                 { $group: { _id: '$conversation_id' } }
             ]);
             const withMessages = new Set(withMessagesResult.map(r => r._id.toString()));
+
             const emptyConvIds = allConversations
                 .filter(c => !withMessages.has(c._id.toString()))
                 .map(c => c._id);
-    
+
             if (emptyConvIds.length > 0) {
                 await Conversation.deleteMany({ _id: { $in: emptyConvIds } });
             }
-    
+
             console.log(`✅ Conversații orfane curățate: ${emptyConvIds.length}`);
         } catch (err) {
             console.error('❌ Eroare cron chat cleanup:', err);
         }
     }, { scheduled: true, timezone: 'Europe/Bucharest' });
 
-// ─── Adaugă 2 views doar anunțurilor active mai noi de 3 luni ─────────
+    // ─── Adaugă views doar anunțurilor active mai noi de 3 luni ─────────
     cron.schedule('0 * * * *', async () => {
         try {
             const threeMonthsAgo = subMonths(new Date(), 3);
+
             const result = await sales.updateMany(
                 {
                     is_active: true,
@@ -218,13 +224,14 @@ const startCronJobs = () => {
                 { $inc: { views: 1 } },
                 { timestamps: false }
             );
+
             console.log(`👁️ Views +1 la ${result.modifiedCount} anunțuri active (<3 luni).`);
         } catch (err) {
             console.error('❌ Eroare cron adăugare views:', err);
         }
     }, { scheduled: true, timezone: 'Europe/Bucharest' });
 
-
+    // ─── Dispecerul de postare socială ───────────────────────────────────
     cron.schedule('*/5 * * * *', async () => {
         try {
             await dispatchSocialQueue();
@@ -233,7 +240,7 @@ const startCronJobs = () => {
         }
     }, { scheduled: true, timezone: 'Europe/Bucharest' });
 
-
+    // ─── Drenajul cozii de ștergeri sociale ──────────────────────────────
     cron.schedule('*/15 * * * *', async () => {
         try {
             await drainSocialCleanup();
@@ -241,7 +248,16 @@ const startCronJobs = () => {
             console.error('❌ Eroare cron social cleanup:', err.message);
         }
     }, { scheduled: true, timezone: 'Europe/Bucharest' });
-    
+
+    // ─── Raport zilnic de sănătate a promovării ──────────────────────────
+    cron.schedule('30 9 * * *', async () => {
+        try {
+            await reportSocialHealth();
+        } catch (err) {
+            console.error('❌ Eroare cron social health:', err.message);
+        }
+    }, { scheduled: true, timezone: 'Europe/Bucharest' });
+
 };
 
 export default startCronJobs;

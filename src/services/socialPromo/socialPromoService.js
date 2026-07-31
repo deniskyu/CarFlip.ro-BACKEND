@@ -25,19 +25,31 @@ export const PLATFORM_CONFIG = {
     },
 };
 
+// Erori PERMANENTE (conținut respins, cerere invalidă): puține șanse.
 const MAX_ATTEMPTS = 3;
 const RETRY_BACKOFF_MINUTES = [15, 60, 240];
+
+// Erori TEMPORARE (429, 5xx, rețea): multe șanse, backoff lung.
+// Nu consumă din MAX_ATTEMPTS — o pană la Zernio nu trebuie să omoare anunțul.
+const MAX_TEMP_FAILURES = 20;
+const TEMP_BACKOFF_MINUTES = [5, 15, 30, 60, 120, 240];
+
+// Învierea anunțurilor moarte: după 24h, de maximum 2 ori.
+const REVIVE_AFTER_HOURS = 24;
+const MAX_REVIVALS = 2;
+
 const STUCK_CLAIM_MINUTES = 15;
 const CLEANUP_BATCH = 10;
 const CLEANUP_MAX_ATTEMPTS = 6;
 
 const minutesAgo = (m) => new Date(Date.now() - m * 60 * 1000);
 const minutesFromNow = (m) => new Date(Date.now() + m * 60 * 1000);
+const hoursFromNow = (h) => new Date(Date.now() + h * 3600 * 1000);
 
 const pickImages = (sale, maxImages) => {
     if (!Array.isArray(sale.media)) return [];
     return sale.media
-        .filter(m => m && m.type === 'image' && typeof m.url === 'string' && m.url.startsWith('http'))
+        .filter(m => m && m.type === 'image' && typeof m.url === 'string' && m.url.startsWith('https://'))
         .slice(0, maxImages)
         .map(m => m.url);
 };
@@ -75,6 +87,39 @@ const releaseStuckClaims = async (platform) => {
         }
     } catch (err) {
         console.error(`❌ [social:${platform}] Eroare la eliberarea revendicărilor blocate:`, err.message);
+    }
+};
+
+// Anunțurile marcate 'failed' primesc o a doua șansă după 24h.
+// $not:{$gte} în loc de $lt — prinde și documentele care nu au încă acest câmp.
+const reviveFailed = async (platform) => {
+    const field = `social_promo.${platform}`;
+    const now = new Date();
+    try {
+        const res = await sales.updateMany(
+            {
+                allow_social_promo: true,
+                is_active: true,
+                status: 'active',
+                [`${field}.status`]: 'failed',
+                [`${field}.retry_after`]: { $not: { $gt: now } },
+                [`${field}.revivals`]: { $not: { $gte: MAX_REVIVALS } },
+            },
+            {
+                $set: {
+                    [`${field}.status`]: 'pending',
+                    [`${field}.attempts`]: 0,
+                    [`${field}.temp_failures`]: 0,
+                    [`${field}.retry_after`]: null,
+                },
+                $inc: { [`${field}.revivals`]: 1 },
+            }
+        );
+        if (res.modifiedCount > 0) {
+            console.log(`🔁 [social:${platform}] ${res.modifiedCount} anunțuri eșuate au primit o nouă șansă.`);
+        }
+    } catch (err) {
+        console.error(`❌ [social:${platform}] Eroare la învierea anunțurilor eșuate:`, err.message);
     }
 };
 
@@ -134,14 +179,55 @@ const markResult = async (saleId, platform, patch) => {
 };
 
 const handleFailure = async (sale, platform, err) => {
-    const attempts = (sale.social_promo?.[platform]?.attempts || 0) + 1;
+    const st = (sale.social_promo && sale.social_promo[platform]) || {};
     const message = String(err?.message || err).slice(0, 400);
+
+    // TIMEOUT — nu știm dacă postarea a ajuns pe platformă sau nu.
+    // Nu reluăm: un duplicat pe TikTok nu se poate șterge niciodată.
+    if (err && err.timeout) {
+        await markResult(sale._id, platform, {
+            status: 'unknown',
+            last_error: `TIMEOUT — verifică manual dacă postarea există pe pagină. ${message}`,
+        });
+        console.error(`❓ [social:${platform}] ${sale._id} TIMEOUT. Marcat 'unknown', NU se reia automat (risc de duplicat).`);
+        return;
+    }
+
+    // EROARE TEMPORARĂ — Zernio/platforma indisponibile. Nu consumă din attempts.
+    if (err && err.retryable) {
+        const temp = (st.temp_failures || 0) + 1;
+
+        if (temp >= MAX_TEMP_FAILURES) {
+            await markResult(sale._id, platform, {
+                status: 'failed',
+                temp_failures: temp,
+                last_error: message,
+                retry_after: hoursFromNow(REVIVE_AFTER_HOURS),
+            });
+            console.error(`🚫 [social:${platform}] ${sale._id}: ${temp} eșecuri temporare consecutive. Marcat failed.`);
+            return;
+        }
+
+        const backoff = TEMP_BACKOFF_MINUTES[Math.min(temp - 1, TEMP_BACKOFF_MINUTES.length - 1)];
+        await markResult(sale._id, platform, {
+            status: 'pending',
+            temp_failures: temp,
+            last_error: message,
+            retry_after: minutesFromNow(backoff),
+        });
+        console.warn(`⏳ [social:${platform}] Eroare temporară ${temp}/${MAX_TEMP_FAILURES} pentru ${sale._id}, reia peste ${backoff} min: ${message}`);
+        return;
+    }
+
+    // EROARE PERMANENTĂ — conținut respins, cerere invalidă.
+    const attempts = (st.attempts || 0) + 1;
 
     if (attempts >= MAX_ATTEMPTS) {
         await markResult(sale._id, platform, {
             status: 'failed',
             attempts,
             last_error: message,
+            retry_after: hoursFromNow(REVIVE_AFTER_HOURS),
         });
         console.error(`🚫 [social:${platform}] Eșec definitiv pentru ${sale._id} (${attempts} încercări): ${message}`);
         return;
@@ -181,6 +267,7 @@ const dispatchPlatform = async (platform) => {
     if (!isConfigured(platform)) return;
 
     await releaseStuckClaims(platform);
+    await reviveFailed(platform);
 
     const open = await isRateWindowOpen(platform);
     if (!open) return;
@@ -194,7 +281,7 @@ const dispatchPlatform = async (platform) => {
     if (imageUrls.length === 0) {
         await markResult(sale._id, platform, {
             status: 'skipped',
-            last_error: 'Anunțul nu are nicio imagine utilizabilă.',
+            last_error: 'Anunțul nu are nicio imagine HTTPS utilizabilă.',
         });
         console.log(`⏭️ [social:${platform}] ${sale._id} sărit (fără imagini).`);
         return;
@@ -257,9 +344,26 @@ export const dispatchSocialQueue = async () => {
     }
 };
 
+// Acceptă atât documente complete, cât și documente parțiale venite din
+// .select()/.lean(). Dacă lipsește social_promo dintr-o proiecție, recitim
+// exact câmpul necesar în loc să eșuăm tăcut.
 export const enqueueSocialCleanup = async (sale) => {
-    if (!sale) return;
-    const fbId = sale.social_promo?.facebook?.zernio_post_id;
+    if (!sale || !sale._id) return;
+
+    let fbId = sale.social_promo?.facebook?.zernio_post_id;
+
+    if (!fbId && sale.social_promo === undefined && sale.status === undefined) {
+        try {
+            const fresh = await sales
+                .findById(sale._id)
+                .select('social_promo.facebook.zernio_post_id')
+                .lean();
+            fbId = fresh?.social_promo?.facebook?.zernio_post_id;
+        } catch (err) {
+            console.error(`❌ [social] Nu am putut reciti social_promo pentru ${sale._id}:`, err.message);
+        }
+    }
+
     if (fbId) await enqueueCleanupRecord(fbId, sale._id);
 };
 
@@ -319,5 +423,42 @@ export const drainSocialCleanup = async () => {
             );
             console.warn(`⚠️ [social:cleanup] Încercarea ${attempts} a eșuat pentru ${item.zernio_post_id}: ${err.message}`);
         }
+    }
+};
+
+// Raport de sănătate — apelat de cron-ul zilnic. Scopul e să NU rămână
+// anunțuri moarte sau incerte fără ca cineva să afle.
+export const reportSocialHealth = async () => {
+    if (!SOCIAL_ENABLED) return;
+    try {
+        const [fbFailed, ttFailed, fbUnknown, ttUnknown, fbSkipped, ttSkipped, cleanupBacklog] = await Promise.all([
+            sales.countDocuments({ 'social_promo.facebook.status': 'failed' }),
+            sales.countDocuments({ 'social_promo.tiktok.status': 'failed' }),
+            sales.countDocuments({ 'social_promo.facebook.status': 'unknown' }),
+            sales.countDocuments({ 'social_promo.tiktok.status': 'unknown' }),
+            sales.countDocuments({ 'social_promo.facebook.status': 'skipped' }),
+            sales.countDocuments({ 'social_promo.tiktok.status': 'skipped' }),
+            SocialCleanup.countDocuments({}),
+        ]);
+
+        const problems = fbFailed + ttFailed + fbUnknown + ttUnknown;
+
+        if (problems === 0 && cleanupBacklog === 0) {
+            console.log('💚 [social:health] Totul curat.');
+            return;
+        }
+
+        console.warn(
+            `🩺 [social:health] failed fb=${fbFailed} tt=${ttFailed} | ` +
+            `unknown fb=${fbUnknown} tt=${ttUnknown} | ` +
+            `skipped fb=${fbSkipped} tt=${ttSkipped} | ` +
+            `ștergeri restante=${cleanupBacklog}`
+        );
+
+        if (fbUnknown + ttUnknown > 0) {
+            console.error(`❗ [social:health] ${fbUnknown + ttUnknown} anunțuri în stare 'unknown' — verifică manual paginile, pot fi postări duplicate sau lipsă.`);
+        }
+    } catch (err) {
+        console.error('❌ [social:health] Raportul a eșuat:', err.message);
     }
 };
