@@ -218,7 +218,7 @@ const startCronJobs = () => {
                 { $inc: { views: 1 } },
                 { timestamps: false }
             );
-            console.log(`👁️ Views +2 la ${result.modifiedCount} anunțuri active (<3 luni).`);
+            console.log(`👁️ Views +1 la ${result.modifiedCount} anunțuri active (<3 luni).`);
         } catch (err) {
             console.error('❌ Eroare cron adăugare views:', err);
         }

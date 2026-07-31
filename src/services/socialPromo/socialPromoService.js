@@ -1,5 +1,6 @@
 import sales from '../../models/salesModel.js';
 import SocialCleanup from '../../models/socialCleanupModel.js';
+import SocialPostLog from '../../models/socialPostLogModel.js';
 import { buildCaptions } from './captions.js';
 import {
     SOCIAL_ENABLED,
@@ -41,6 +42,19 @@ const pickImages = (sale, maxImages) => {
         .map(m => m.url);
 };
 
+const recordPostLog = async (platform, saleId, zernioPostId) => {
+    try {
+        await SocialPostLog.create({
+            platform,
+            posted_at: new Date(),
+            sale_id: saleId || null,
+            zernio_post_id: zernioPostId || null,
+        });
+    } catch (err) {
+        console.error(`🚨 [social:${platform}] CRITIC: jurnalul de rate limiting nu s-a putut scrie (${err.message}). Contorul zilnic poate rămâne în urmă.`);
+    }
+};
+
 const releaseStuckClaims = async (platform) => {
     const field = `social_promo.${platform}`;
     try {
@@ -66,23 +80,20 @@ const releaseStuckClaims = async (platform) => {
 
 const isRateWindowOpen = async (platform) => {
     const cfg = PLATFORM_CONFIG[platform];
-    const field = `social_promo.${platform}.posted_at`;
 
-    const lastPost = await sales
-        .findOne({ [field]: { $ne: null } })
-        .sort({ [field]: -1 })
-        .select(field)
+    const lastPost = await SocialPostLog
+        .findOne({ platform })
+        .sort({ posted_at: -1 })
+        .select('posted_at')
         .lean();
 
-    if (lastPost) {
-        const lastAt = lastPost.social_promo?.[platform]?.posted_at;
-        if (lastAt && lastAt > minutesAgo(cfg.minIntervalMinutes)) {
-            return false;
-        }
+    if (lastPost && lastPost.posted_at && lastPost.posted_at > minutesAgo(cfg.minIntervalMinutes)) {
+        return false;
     }
 
-    const postedLast24h = await sales.countDocuments({
-        [field]: { $gte: minutesAgo(24 * 60) },
+    const postedLast24h = await SocialPostLog.countDocuments({
+        platform,
+        posted_at: { $gte: minutesAgo(24 * 60) },
     });
 
     if (postedLast24h >= cfg.dailyCap) {
@@ -123,7 +134,6 @@ const markResult = async (saleId, platform, patch) => {
 };
 
 const handleFailure = async (sale, platform, err) => {
-    const field = `social_promo.${platform}`;
     const attempts = (sale.social_promo?.[platform]?.attempts || 0) + 1;
     const message = String(err?.message || err).slice(0, 400);
 
@@ -212,6 +222,8 @@ const dispatchPlatform = async (platform) => {
         await handleFailure(sale, platform, err);
         return;
     }
+
+    await recordPostLog(platform, sale._id, zernioPostId);
 
     const updated = await markResult(sale._id, platform, {
         status: 'posted',

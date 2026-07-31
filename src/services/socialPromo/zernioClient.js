@@ -92,7 +92,7 @@ export const postToTikTok = async ({ imageUrls, title, description }) => {
             media_type: 'photo',
             photo_cover_index: 0,
             description,
-            auto_add_music: true,
+            auto_add_music: false,
             commercialContentType: 'brand_organic',
             content_preview_confirmed: true,
             express_consent_given: true,
