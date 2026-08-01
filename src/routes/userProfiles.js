@@ -161,7 +161,8 @@ userProfiles.get('/api/user/my-posts', authUser, fetchLimiter, async (req, res) 
                 shouldCheckProcessing
                     ? sales.exists({
                         user_id: currentUserId,
-                        status: { $in: ['pending_payment', 'media_processing'] }
+                        status: 'media_processing',
+                        createdAt: { $gte: new Date(Date.now() - 30 * 60 * 1000) }
                     })
                     : Promise.resolve(null)
             ]);
