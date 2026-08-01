@@ -18,11 +18,15 @@ const STATUSES = ['pending', 'posting', 'posted', 'failed', 'skipped', 'unknown'
 
 const ago = (date) => {
     if (!date) return 'niciodată';
-    const mins = Math.round((Date.now() - new Date(date).getTime()) / 60000);
-    if (mins < 60) return `acum ${mins} min`;
+    const diff = Math.round((Date.now() - new Date(date).getTime()) / 60000);
+    const future = diff < 0;
+    const mins = Math.abs(diff);
+    const pre = future ? 'peste' : 'acum';
+    if (mins < 1) return future ? 'imediat' : 'chiar acum';
+    if (mins < 60) return `${pre} ${mins} min`;
     const h = Math.floor(mins / 60);
-    if (h < 24) return `acum ${h}h ${mins % 60}min`;
-    return `acum ${Math.floor(h / 24)}z ${h % 24}h`;
+    if (h < 24) return `${pre} ${h}h ${mins % 60}min`;
+    return `${pre} ${Math.floor(h / 24)}z ${h % 24}h`;
 };
 
 const run = async () => {
