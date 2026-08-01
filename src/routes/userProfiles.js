@@ -163,7 +163,7 @@ userProfiles.get('/api/user/my-posts', authUser, fetchLimiter, async (req, res) 
                         user_id: currentUserId,
                         status: 'media_processing',
                         createdAt: { $gte: new Date(Date.now() - 30 * 60 * 1000) }
-                    })
+                    }).catch(() => null) // degradare grațioasă: dacă verificarea eșuează, ascundem banner-ul, NU stricăm lista de anunțuri
                     : Promise.resolve(null)
             ]);
 
