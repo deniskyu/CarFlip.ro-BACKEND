@@ -146,10 +146,25 @@ userProfiles.get('/api/user/my-posts', authUser, fetchLimiter, async (req, res) 
                 query._id = { $lt: new mongoose.Types.ObjectId(cursor) };
             }
 
-            const userPosts = await sales.find(query)
-                .sort({ _id: -1 })
-                .limit(limit)
-                .populate('user_id', 'username icon');
+// ── NOU: banner "anunțuri în procesare" ──────────────────────────
+            // Calculăm DOAR pe tab-ul "active" și DOAR la prima pagină (fără
+            // cursor) — nu la fiecare scroll/paginare. sales.exists() e o
+            // interogare foarte ieftină (doar index scan, fără documente
+            // întoarse), rulează în paralel cu query-ul principal via Promise.all.
+            const shouldCheckProcessing = type === 'active' && !cursor;
+
+            const [userPosts, hasProcessingRaw] = await Promise.all([
+                sales.find(query)
+                    .sort({ _id: -1 })
+                    .limit(limit)
+                    .populate('user_id', 'username icon'),
+                shouldCheckProcessing
+                    ? sales.exists({
+                        user_id: currentUserId,
+                        status: { $in: ['pending_payment', 'media_processing'] }
+                    })
+                    : Promise.resolve(null)
+            ]);
 
             const postsWithLikeStatus = userPosts.map(doc => {
                 const postObj = doc.toObject({ getters: true, virtuals: true });
@@ -166,12 +181,21 @@ userProfiles.get('/api/user/my-posts', authUser, fetchLimiter, async (req, res) 
                 nextCursor = userPosts[userPosts.length - 1]._id;
             }
 
-            return res.json({ 
-                success: true, 
+            const responseBody = {
+                success: true,
                 data: postsWithLikeStatus,
                 nextCursor
-            });
-        } 
+            };
+
+            // Trimitem hasProcessing DOAR când l-am calculat (prima pagină, tab activ).
+            // Pe restul cererilor câmpul lipsește complet — frontend-ul știe să
+            // nu atingă starea existentă când lipsește.
+            if (shouldCheckProcessing) {
+                responseBody.hasProcessing = !!hasProcessingRaw;
+            }
+
+            return res.json(responseBody);
+        }
         
         // Cazul "Liked" - Folosim Aggregation pentru a sorta după data like-ului
         else if (type === 'liked') {

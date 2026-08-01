@@ -108,6 +108,7 @@ saleSchema.index({ expires_at: 1 });
 //saleSchema.index({ negotiable: 1 });
 saleSchema.index({ is_active: 1, _id: -1 }); // ← pentru feed (query principal)
 saleSchema.index({ user_id: 1, _id: -1 });   // ← pentru my-posts
+saleSchema.index({ user_id: 1, status: 1 }); // ← pentru banner-ul "anunțuri în procesare" (my-posts)
 saleSchema.index({ "liked_by.user_id": 1 });  // ← pentru liked aggregation
 saleSchema.index({ is_active: 1, likes_count: -1, _id: -1 }); // ← pentru search
 saleSchema.index({ is_active: 1, "location.county": 1, _id: -1 }); // ← pentru Tier A (feed pe județ)
