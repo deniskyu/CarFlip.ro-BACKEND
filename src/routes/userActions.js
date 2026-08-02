@@ -912,7 +912,7 @@ userActions.post('/api/sales/search', authUser, fetchLimiter, async (req, res) =
             if (!val || val === 'null' || val === 'undefined') return null;
             const cleaned = String(val).trim();
             const escaped = cleaned.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            return new RegExp(escaped, 'i');
+            return new RegExp('^' + escaped + '$', 'i');
         };
 
         const currentUserData = await users.findById(req.user.id).select('blocking blocked_by');
@@ -1079,7 +1079,7 @@ userActions.post('/api/sales/search-unseen', authUser, fetchLimiter, async (req,
             if (!val || val === 'null' || val === 'undefined') return null;
             const cleaned = String(val).trim();
             const escaped = cleaned.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            return new RegExp(escaped, 'i');
+            return new RegExp('^' + escaped + '$', 'i');
         };
 
         const currentUserData = await users.findById(req.user.id).select('blocking blocked_by');
@@ -3018,7 +3018,7 @@ userActions.get('/api/sales/search-list', authUser, fetchLimiter, async (req, re
             if (!val || val === 'null' || val === 'undefined') return null;
             const cleaned = String(val).trim();
             const escaped = cleaned.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            return new RegExp(escaped, 'i');
+            return new RegExp('^' + escaped + '$', 'i');
         };
 
         const currentUserData = await users.findById(req.user.id).select('blocking blocked_by');
