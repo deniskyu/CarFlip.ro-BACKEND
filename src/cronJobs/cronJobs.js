@@ -250,7 +250,11 @@ const startCronJobs = () => {
                     }
                     if (Object.keys(counts).length > 0) {
                         operations.push({
-                            updateOne: { filter: { _id: conv._id }, update: { $set: counts } }
+                            updateOne: {
+                                filter: { _id: conv._id },
+                                update: { $set: counts },
+                                timestamps: false
+                            }
                         });
                     }
                 }
