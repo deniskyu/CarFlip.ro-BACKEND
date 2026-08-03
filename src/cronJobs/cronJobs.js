@@ -20,6 +20,11 @@ import {
 
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+const ORPHAN_CONVERSATION_GRACE_HOURS = 24;
+const IMAGE_RELEASE_BATCH = 500;
+const IMAGE_RELEASE_MAX_BATCHES = 100;
+const CONVERSATION_DELETE_BATCH = 500;
+
 const r2 = new S3Client({
     region: 'auto',
     endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -163,49 +168,129 @@ const startCronJobs = () => {
         timezone: 'Europe/Bucharest'
     });
 
-    // Curăță conversațiile rămase fără niciun mesaj (orfane după TTL MongoDB)
+    // Curăță mesajele expirate (30 zile), pozele lor din R2 și conversațiile rămase goale
     cron.schedule('50 3 * * *', async () => {
         try {
-            // ─── Curățare imagini chat din R2 ────────────────────────────────────
             const now = new Date();
-            const expiredImages = await Message.find({
-                type: 'image',
+
+            let releasedImages = 0;
+            let batches = 0;
+
+            while (batches < IMAGE_RELEASE_MAX_BATCHES) {
+                batches += 1;
+
+                const batch = await Message.find({
+                    expires_at: { $lte: now },
+                    type: 'image',
+                    image_public_id: { $ne: null }
+                }).select('_id image_public_id').limit(IMAGE_RELEASE_BATCH).lean();
+
+                if (batch.length === 0) break;
+
+                await Promise.all(batch.map(item =>
+                    r2.send(new DeleteObjectCommand({
+                        Bucket: process.env.R2_BUCKET_NAME,
+                        Key: item.image_public_id
+                    })).catch(() => {})
+                ));
+
+                await Message.updateMany(
+                    { _id: { $in: batch.map(item => item._id) } },
+                    { $set: { image_public_id: null } }
+                );
+
+                releasedImages += batch.length;
+            }
+
+            if (releasedImages > 0) {
+                console.log(`✅ Imagini chat expirate șterse din R2: ${releasedImages}`);
+            }
+
+            const affectedConversationIds = await Message.distinct('conversation_id', {
+                expires_at: { $lte: now }
+            });
+
+            const deletedMessages = await Message.deleteMany({
                 expires_at: { $lte: now },
-                image_public_id: { $ne: null }
-            }).select('image_public_id').lean();
-
-            if (expiredImages.length > 0) {
-                const imgChunks = chunkArray(expiredImages.map(m => m.image_public_id), 50);
-                for (const chunk of imgChunks) {
-                    await Promise.all(chunk.map(key =>
-                        r2.send(new DeleteObjectCommand({
-                            Bucket: process.env.R2_BUCKET_NAME,
-                            Key: key
-                        })).catch(() => {})
-                    ));
-                }
-                console.log(`✅ Imagini chat expirate șterse din R2: ${expiredImages.length}`);
-            }
-
-            const deletedMessages = await Message.deleteMany({ expires_at: { $lte: now } });
+                $or: [
+                    { type: { $ne: 'image' } },
+                    { image_public_id: null }
+                ]
+            });
             console.log(`✅ Mesaje expirate șterse din DB: ${deletedMessages.deletedCount}`);
-            // ─────────────────────────────────────────────────────────────────────
 
-            const allConversations = await Conversation.find({}).select('_id').lean();
-            const withMessagesResult = await Message.aggregate([
-                { $group: { _id: '$conversation_id' } }
-            ]);
-            const withMessages = new Set(withMessagesResult.map(r => r._id.toString()));
+            if (affectedConversationIds.length > 0) {
+                const affectedConversations = await Conversation.find({
+                    _id: { $in: affectedConversationIds }
+                }).select('participants').lean();
 
-            const emptyConvIds = allConversations
-                .filter(c => !withMessages.has(c._id.toString()))
-                .map(c => c._id);
+                const unreadBySender = await Message.aggregate([
+                    { $match: { conversation_id: { $in: affectedConversationIds }, is_read: false } },
+                    { $group: { _id: { conversation: '$conversation_id', sender: '$sender_id' }, total: { $sum: 1 } } }
+                ]).allowDiskUse(true);
 
-            if (emptyConvIds.length > 0) {
-                await Conversation.deleteMany({ _id: { $in: emptyConvIds } });
+                const grouped = new Map();
+                for (const row of unreadBySender) {
+                    const key = String(row._id.conversation);
+                    if (!grouped.has(key)) grouped.set(key, new Map());
+                    grouped.get(key).set(String(row._id.sender), row.total);
+                }
+
+                const operations = [];
+                for (const conv of affectedConversations) {
+                    const senders = grouped.get(String(conv._id)) || new Map();
+                    const counts = {};
+                    for (const participant of conv.participants || []) {
+                        const key = String(participant);
+                        let total = 0;
+                        for (const [senderId, amount] of senders) {
+                            if (senderId !== key) total += amount;
+                        }
+                        counts[`unread_counts.${key}`] = total;
+                    }
+                    if (Object.keys(counts).length > 0) {
+                        operations.push({
+                            updateOne: { filter: { _id: conv._id }, update: { $set: counts } }
+                        });
+                    }
+                }
+
+                if (operations.length > 0) {
+                    const opChunks = chunkArray(operations, CONVERSATION_DELETE_BATCH);
+                    for (const chunk of opChunks) {
+                        await Conversation.bulkWrite(chunk, { ordered: false });
+                    }
+                    console.log(`✅ Unread recalculat pentru ${operations.length} conversații.`);
+                }
             }
 
-            console.log(`✅ Conversații orfane curățate: ${emptyConvIds.length}`);
+            const orphanCutoff = new Date(Date.now() - ORPHAN_CONVERSATION_GRACE_HOURS * 60 * 60 * 1000);
+
+            const candidateConversations = await Conversation.find({
+                createdAt: { $lte: orphanCutoff },
+                updatedAt: { $lte: orphanCutoff }
+            }).select('_id').lean();
+
+            if (candidateConversations.length > 0) {
+                const withMessagesResult = await Message.aggregate([
+                    { $group: { _id: '$conversation_id' } }
+                ]).allowDiskUse(true);
+
+                const withMessages = new Set(withMessagesResult.map(r => String(r._id)));
+
+                const emptyConvIds = candidateConversations
+                    .filter(c => !withMessages.has(String(c._id)))
+                    .map(c => c._id);
+
+                if (emptyConvIds.length > 0) {
+                    const convChunks = chunkArray(emptyConvIds, CONVERSATION_DELETE_BATCH);
+                    for (const chunk of convChunks) {
+                        await Conversation.deleteMany({ _id: { $in: chunk } });
+                    }
+                }
+
+                console.log(`✅ Conversații orfane curățate: ${emptyConvIds.length}`);
+            }
         } catch (err) {
             console.error('❌ Eroare cron chat cleanup:', err);
         }

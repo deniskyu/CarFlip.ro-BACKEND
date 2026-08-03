@@ -12,31 +12,29 @@ const conversationSchema = new mongoose.Schema({
     },
     last_message_type: {
         type: String,
-        enum: ['text', 'image'],
+        enum: ['text', 'image', 'sale_link'],
         default: 'text'
     },
     last_message_at: {
         type: Date,
         default: Date.now
     },
-    // Unread count separat per participant
     unread_counts: {
         type: Map,
         of: Number,
-        default: {}
+        default: () => ({})
     },
-    // Dacă un participant șterge conversația, o ascundem doar pentru el
     deleted_by: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'users'
     }]
 }, { timestamps: true });
 
-// Index pentru a găsi rapid conversația dintre 2 useri
-conversationSchema.index({ participants: 1 });
+conversationSchema.index({ participants: 1, last_message_at: -1 });
+conversationSchema.index({ participants: 1, deleted_by: 1 });
 conversationSchema.index({ last_message_at: -1 });
 
-const Conversation = mongoose.models.conversations || 
+const Conversation = mongoose.models.conversations ||
     mongoose.model('conversations', conversationSchema);
 
 export default Conversation;

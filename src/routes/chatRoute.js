@@ -7,13 +7,17 @@ import { authUser, fetchLimiter } from './usersRoute.js';
 import Conversation from '../models/conversationModel.js';
 import Message from '../models/messageModel.js';
 import users from '../models/userModel.js';
-import { getIO } from '../socket/socketManager.js';
+import { getIO, emitUnreadTotal } from '../socket/socketManager.js';
 import { sendAndSaveNotification } from '../services/notificationService.js';
 import sales from '../models/salesModel.js';
 
 const chatRoute = Router();
 
-// ─── R2 Setup ────────────────────────────────────────────────────────────────
+const MESSAGE_PAGE_SIZE = 30;
+const MAX_MESSAGE_PAGE_SIZE = 50;
+const CONVERSATION_PAGE_SIZE = 200;
+const DELETED_MESSAGE_TEXT = 'Acest mesaj a fost șters';
+
 const r2 = new S3Client({
     region: 'auto',
     endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -23,12 +27,11 @@ const r2 = new S3Client({
     },
 });
 
-// ─── Multer în memorie (doar pentru poze chat) ────────────────────────────────
 const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 },
+    limits: { fileSize: 10 * 1024 * 1024, files: 1 },
     fileFilter: (req, file, cb) => {
-        if (file.mimetype.startsWith('image/')) {
+        if (file.mimetype && file.mimetype.startsWith('image/')) {
             cb(null, true);
         } else {
             cb(new Error('Doar imagini sunt permise.'), false);
@@ -36,20 +39,62 @@ const upload = multer({
     }
 });
 
-// ─── Helper: verifică block bilateral ────────────────────────────────────────
+const uploadSingleImage = (req, res, next) => {
+    upload.single('image')(req, res, (err) => {
+        if (!err) return next();
+        const message = err.code === 'LIMIT_FILE_SIZE'
+            ? 'Imaginea depășește 10MB.'
+            : (err.message || 'Fișier invalid.');
+        return res.status(400).json({ success: false, message });
+    });
+};
+
+const isValidId = (value) => {
+    if (!value) return false;
+    return mongoose.Types.ObjectId.isValid(String(value));
+};
+
+const readUnreadValue = (map, key) => {
+    if (!map) return 0;
+    if (map instanceof Map) return Number(map.get(key)) || 0;
+    if (typeof map === 'object') return Number(map[key]) || 0;
+    return 0;
+};
+
 const checkBlocked = async (userAId, userBId) => {
+    if (!isValidId(userAId) || !isValidId(userBId)) return true;
     const userA = await users.findById(userAId).select('blocking blocked_by').lean();
     if (!userA) return true;
+    const target = String(userBId);
     return (
-        userA.blocking?.some(id => id.toString() === userBId.toString()) ||
-        userA.blocked_by?.some(id => id.toString() === userBId.toString())
+        (userA.blocking || []).some(id => String(id) === target) ||
+        (userA.blocked_by || []).some(id => String(id) === target)
     );
 };
 
+const otherParticipantId = (conversation, userId) => {
+    const key = String(userId);
+    const found = (conversation?.participants || [])
+        .map(p => (p && p._id ? String(p._id) : String(p)))
+        .find(p => p !== key);
+    return found || null;
+};
 
-// ==========================================
-// 1. GET: Lista conversații (cu filtru block)
-// ==========================================
+const formatConversation = (conv, userId) => {
+    const key = String(userId);
+    const other = (conv.participants || []).find(p => p && String(p._id) !== key);
+    if (!other) return null;
+    return {
+        _id: conv._id,
+        participant: other,
+        last_message: conv.last_message,
+        last_message_type: conv.last_message_type,
+        last_message_at: conv.last_message_at,
+        unread_count: readUnreadValue(conv.unread_counts, key)
+    };
+};
+
+
 chatRoute.get('/api/chat/conversations', authUser, fetchLimiter, async (req, res) => {
     try {
         const userId = req.user.id;
@@ -59,10 +104,10 @@ chatRoute.get('/api/chat/conversations', authUser, fetchLimiter, async (req, res
             return res.status(404).json({ success: false, message: 'Utilizator negăsit.' });
         }
 
-        const blockedIds = [
-            ...(currentUser.blocking || []).map(id => id.toString()),
-            ...(currentUser.blocked_by || []).map(id => id.toString())
-        ];
+        const blockedIds = new Set([
+            ...(currentUser.blocking || []).map(id => String(id)),
+            ...(currentUser.blocked_by || []).map(id => String(id))
+        ]);
 
         const conversations = await Conversation.find({
             participants: userId,
@@ -70,32 +115,17 @@ chatRoute.get('/api/chat/conversations', authUser, fetchLimiter, async (req, res
             last_message: { $ne: null }
         })
         .sort({ last_message_at: -1 })
+        .limit(CONVERSATION_PAGE_SIZE)
         .populate('participants', 'username icon')
         .lean();
 
-        const filtered = conversations.filter(conv => {
-            const otherParticipant = conv.participants.find(
-                p => p && p._id.toString() !== userId
-            );
-            if (!otherParticipant) return false;
-            return !blockedIds.includes(otherParticipant._id.toString());
-        });
-
-        const formatted = filtered.map(conv => {
-            const otherParticipant = conv.participants.find(
-                p => p && p._id.toString() !== userId
-            );
-            const unreadCount = conv.unread_counts?.[userId] || 0;
-
-            return {
-                _id: conv._id,
-                participant: otherParticipant,
-                last_message: conv.last_message,
-                last_message_type: conv.last_message_type,
-                last_message_at: conv.last_message_at,
-                unread_count: unreadCount
-            };
-        });
+        const formatted = [];
+        for (const conv of conversations) {
+            const item = formatConversation(conv, userId);
+            if (!item) continue;
+            if (blockedIds.has(String(item.participant._id))) continue;
+            formatted.push(item);
+        }
 
         return res.json({ success: true, data: formatted });
 
@@ -106,9 +136,40 @@ chatRoute.get('/api/chat/conversations', authUser, fetchLimiter, async (req, res
 });
 
 
-// ==========================================
-// 2. POST: Creează sau găsește conversație
-// ==========================================
+chatRoute.get('/api/chat/conversations/:conversationId', authUser, fetchLimiter, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { conversationId } = req.params;
+
+        if (!isValidId(conversationId)) {
+            return res.status(400).json({ success: false, message: 'ID conversație invalid.' });
+        }
+
+        const conversation = await Conversation.findOne({
+            _id: conversationId,
+            participants: userId
+        })
+        .populate('participants', 'username icon')
+        .lean();
+
+        if (!conversation) {
+            return res.status(404).json({ success: false, message: 'Conversație negăsită.' });
+        }
+
+        const formatted = formatConversation(conversation, userId);
+        if (!formatted) {
+            return res.status(404).json({ success: false, message: 'Participant negăsit.' });
+        }
+
+        return res.json({ success: true, data: formatted });
+
+    } catch (error) {
+        console.error('❌ GET /api/chat/conversations/:id:', error);
+        return res.status(500).json({ success: false, message: 'Eroare server.' });
+    }
+});
+
+
 chatRoute.post('/api/chat/conversations', authUser, fetchLimiter, async (req, res) => {
     try {
         const userId = req.user.id;
@@ -118,11 +179,11 @@ chatRoute.post('/api/chat/conversations', authUser, fetchLimiter, async (req, re
             return res.status(400).json({ success: false, message: 'targetUserId lipsește.' });
         }
 
-        if (targetUserId === userId) {
+        if (String(targetUserId) === String(userId)) {
             return res.status(400).json({ success: false, message: 'Nu poți discuta cu tine însuți.' });
         }
 
-        if (!mongoose.Types.ObjectId.isValid(targetUserId)) {
+        if (!isValidId(targetUserId)) {
             return res.status(400).json({ success: false, message: 'ID invalid.' });
         }
 
@@ -144,23 +205,21 @@ chatRoute.post('/api/chat/conversations', authUser, fetchLimiter, async (req, re
             conversation = await Conversation.create({
                 participants: [userId, targetUserId],
                 unread_counts: {
-                    [userId]: 0,
-                    [targetUserId]: 0
+                    [String(userId)]: 0,
+                    [String(targetUserId)]: 0
                 }
             });
-        } else {
-            if (conversation.deleted_by?.some(id => id.toString() === userId)) {
-                await Conversation.findByIdAndUpdate(conversation._id, {
-                    $pull: { deleted_by: userId }
-                });
-            }
+        } else if ((conversation.deleted_by || []).some(id => String(id) === String(userId))) {
+            await Conversation.findByIdAndUpdate(conversation._id, {
+                $pull: { deleted_by: userId }
+            });
         }
 
         const io = getIO();
         if (io) {
-            const convIdStr = conversation._id.toString();
-            io.in(`user_${targetUserId}`).socketsJoin(`conv_${convIdStr}`);
-            io.in(`user_${userId}`).socketsJoin(`conv_${convIdStr}`);
+            const convIdStr = String(conversation._id);
+            io.in(`user_${String(targetUserId)}`).socketsJoin(`conv_${convIdStr}`);
+            io.in(`user_${String(userId)}`).socketsJoin(`conv_${convIdStr}`);
         }
 
         return res.json({
@@ -178,63 +237,62 @@ chatRoute.post('/api/chat/conversations', authUser, fetchLimiter, async (req, re
 });
 
 
-// ==========================================
-// 3. GET: Mesaje dintr-o conversație (cursor pagination)
-// ==========================================
 chatRoute.get('/api/chat/messages/:conversationId', authUser, fetchLimiter, async (req, res) => {
     try {
         const userId = req.user.id;
         const { conversationId } = req.params;
         const { cursor } = req.query;
-        const limit = 30;
 
-        if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+        const requestedLimit = parseInt(req.query.limit, 10);
+        const limit = Number.isFinite(requestedLimit)
+            ? Math.min(MAX_MESSAGE_PAGE_SIZE, Math.max(1, requestedLimit))
+            : MESSAGE_PAGE_SIZE;
+
+        if (!isValidId(conversationId)) {
             return res.status(400).json({ success: false, message: 'ID conversație invalid.' });
         }
 
         const conversation = await Conversation.findOne({
             _id: conversationId,
             participants: userId
-        }).lean();
+        }).select('participants').lean();
 
         if (!conversation) {
             return res.status(404).json({ success: false, message: 'Conversație negăsită.' });
         }
 
-        const otherParticipantId = conversation.participants
-            .find(p => p.toString() !== userId)
-            ?.toString();
+        const recipientId = otherParticipantId(conversation, userId);
 
-        if (otherParticipantId) {
-            const isBlocked = await checkBlocked(userId, otherParticipantId);
+        if (recipientId) {
+            const isBlocked = await checkBlocked(userId, recipientId);
             if (isBlocked) {
                 return res.status(403).json({ success: false, message: 'Conversație indisponibilă.' });
             }
         }
 
-        let query = { conversation_id: conversationId };
-        if (cursor && mongoose.Types.ObjectId.isValid(cursor)) {
-            query._id = { $lt: new mongoose.Types.ObjectId(cursor) };
+        const query = { conversation_id: conversationId };
+        if (cursor) {
+            if (!isValidId(cursor)) {
+                return res.status(400).json({ success: false, message: 'Cursor invalid.' });
+            }
+            query._id = { $lt: new mongoose.Types.ObjectId(String(cursor)) };
         }
 
-        const messages = await Message.find(query)
+        const fetched = await Message.find(query)
             .sort({ _id: -1 })
-            .limit(limit)
+            .limit(limit + 1)
             .populate('sender_id', 'username icon')
             .lean();
 
-        let nextCursor = null;
-        if (messages.length === limit) {
-            nextCursor = messages[messages.length - 1]._id;
-        }
-
-        const reversed = [...messages].reverse();
+        const hasMore = fetched.length > limit;
+        const page = hasMore ? fetched.slice(0, limit) : fetched;
+        const nextCursor = page.length > 0 ? page[page.length - 1]._id : null;
 
         return res.json({
             success: true,
-            data: reversed,
+            data: [...page].reverse(),
             nextCursor,
-            hasMore: messages.length === limit
+            hasMore
         });
 
     } catch (error) {
@@ -244,51 +302,55 @@ chatRoute.get('/api/chat/messages/:conversationId', authUser, fetchLimiter, asyn
 });
 
 
-// ==========================================
-// 4. POST: Upload poză în chat
-// ==========================================
-chatRoute.post('/api/chat/send-image', authUser, upload.single('image'), fetchLimiter, async (req, res) => {
+chatRoute.post('/api/chat/send-image', authUser, fetchLimiter, uploadSingleImage, async (req, res) => {
     try {
         const userId = req.user.id;
         const { conversationId } = req.body;
 
-        if (!req.file) {
+        if (!req.file || !req.file.buffer || req.file.buffer.length === 0) {
             return res.status(400).json({ success: false, message: 'Imaginea lipsește.' });
         }
 
-        if (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId)) {
+        if (!isValidId(conversationId)) {
             return res.status(400).json({ success: false, message: 'conversationId invalid.' });
         }
 
         const conversation = await Conversation.findOne({
             _id: conversationId,
             participants: userId
-        }).lean();
+        }).select('participants').lean();
 
         if (!conversation) {
             return res.status(404).json({ success: false, message: 'Conversație negăsită.' });
         }
 
-        const recipientId = conversation.participants
-            .find(p => p.toString() !== userId)
-            ?.toString();
+        const recipientId = otherParticipantId(conversation, userId);
 
-        if (recipientId) {
-            const isBlocked = await checkBlocked(userId, recipientId);
-            if (isBlocked) {
-                return res.status(403).json({ success: false, message: 'Nu poți trimite mesaje acestui utilizator.' });
-            }
+        if (!recipientId) {
+            return res.status(400).json({ success: false, message: 'Recipient negăsit.' });
         }
 
-        const compressedBuffer = await sharp(req.file.buffer)
-            .resize({
-                width: 1200,
-                height: 1200,
-                fit: 'inside',
-                withoutEnlargement: true
-            })
-            .jpeg({ quality: 80 })
-            .toBuffer();
+        const isBlocked = await checkBlocked(userId, recipientId);
+        if (isBlocked) {
+            return res.status(403).json({ success: false, message: 'Nu poți trimite mesaje acestui utilizator.' });
+        }
+
+        let compressedBuffer;
+        try {
+            compressedBuffer = await sharp(req.file.buffer)
+                .rotate()
+                .resize({
+                    width: 1200,
+                    height: 1200,
+                    fit: 'inside',
+                    withoutEnlargement: true
+                })
+                .jpeg({ quality: 80 })
+                .toBuffer();
+        } catch (sharpErr) {
+            console.error('❌ sharp:', sharpErr.message);
+            return res.status(400).json({ success: false, message: 'Imaginea nu a putut fi procesată.' });
+        }
 
         const fileName = `chat_${Date.now()}_${Math.round(Math.random() * 1E9)}.jpg`;
 
@@ -310,12 +372,14 @@ chatRoute.post('/api/chat/send-image', authUser, upload.single('image'), fetchLi
             image_public_id: fileName
         });
 
+        const now = new Date();
+
         await Conversation.findByIdAndUpdate(conversationId, {
             last_message: '📷 Imagine',
             last_message_type: 'image',
-            last_message_at: new Date(),
+            last_message_at: now,
             $inc: { [`unread_counts.${recipientId}`]: 1 },
-            $pull: { deleted_by: recipientId }
+            $pull: { deleted_by: { $in: [recipientId, userId] } }
         });
 
         const populatedMessage = await Message.findById(newMessage._id)
@@ -324,73 +388,83 @@ chatRoute.post('/api/chat/send-image', authUser, upload.single('image'), fetchLi
 
         const io = getIO();
         if (io) {
+            io.in(`user_${recipientId}`).socketsJoin(`conv_${String(conversationId)}`);
+            io.in(`user_${String(userId)}`).socketsJoin(`conv_${String(conversationId)}`);
+
             io.to(`conv_${conversationId}`).emit('new_message', populatedMessage);
             io.to(`conv_${conversationId}`).emit('conversation_updated', {
-                conversationId,
+                conversationId: String(conversationId),
+                senderId: String(userId),
+                unreadIncrement: 1,
+                silent: false,
                 last_message: '📷 Imagine',
                 last_message_type: 'image',
-                last_message_at: new Date()
+                last_message_at: now
             });
         }
 
-        // ─── FCM trimis mereu — același motiv ca la mesajele text ────────────
-        if (recipientId) {
-            const senderData = await users.findById(userId).select('username icon').lean();
-            await sendAndSaveNotification(
-                [recipientId],
-                {
-                    type: 'NEW_MESSAGE',
-                    title: senderData?.username || 'Mesaj nou',
-                    body: '📷 Ți-a trimis o poză',
-                    saleId: null,
-                    commentId: conversationId
-                },
-                {
-                    id: userId,
-                    name: senderData?.username || '',
-                    image: senderData?.icon || ''
-                }
-            );
-        }
-        // ─────────────────────────────────────────────────────────────────────
-
-        return res.json({
+        res.json({
             success: true,
             data: populatedMessage
         });
 
+        setImmediate(async () => {
+            try {
+                emitUnreadTotal(recipientId).catch(() => {});
+                const senderData = await users.findById(userId).select('username icon').lean();
+                await sendAndSaveNotification(
+                    [recipientId],
+                    {
+                        type: 'NEW_MESSAGE',
+                        title: senderData?.username || 'Mesaj nou',
+                        body: '📷 Ți-a trimis o poză',
+                        saleId: null,
+                        commentId: String(conversationId)
+                    },
+                    {
+                        id: userId,
+                        name: senderData?.username || '',
+                        image: senderData?.icon || ''
+                    }
+                );
+            } catch (err) {
+                console.error('❌ FCM send-image:', err.message);
+            }
+        });
+
+        return;
+
     } catch (error) {
         console.error('❌ POST /api/chat/send-image:', error);
-        return res.status(500).json({ success: false, message: 'Eroare server.' });
+        if (!res.headersSent) {
+            return res.status(500).json({ success: false, message: 'Eroare server.' });
+        }
     }
 });
 
 
-// ==========================================
-// 5. DELETE: Șterge conversație (doar pentru tine)
-// ==========================================
 chatRoute.delete('/api/chat/conversations/:conversationId', authUser, fetchLimiter, async (req, res) => {
     try {
         const userId = req.user.id;
         const { conversationId } = req.params;
 
-        if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+        if (!isValidId(conversationId)) {
             return res.status(400).json({ success: false, message: 'ID invalid.' });
         }
 
-        const conversation = await Conversation.findOne({
-            _id: conversationId,
-            participants: userId
-        });
+        const conversation = await Conversation.findOneAndUpdate(
+            { _id: conversationId, participants: userId },
+            {
+                $addToSet: { deleted_by: userId },
+                $set: { [`unread_counts.${userId}`]: 0 }
+            }
+        ).lean();
 
         if (!conversation) {
             return res.status(404).json({ success: false, message: 'Conversație negăsită.' });
         }
 
-        await Conversation.findByIdAndUpdate(conversationId, {
-            $addToSet: { deleted_by: userId },
-            $set: { [`unread_counts.${userId}`]: 0 }
-        });
+        emitUnreadTotal(userId).catch(() => {});
 
         return res.json({ success: true, message: 'Conversație ștearsă.' });
 
@@ -401,40 +475,33 @@ chatRoute.delete('/api/chat/conversations/:conversationId', authUser, fetchLimit
 });
 
 
-// ==========================================
-// 6. GET: Total unread count (pentru badge tab navigator)
-// ==========================================
 chatRoute.get('/api/chat/unread-count', authUser, fetchLimiter, async (req, res) => {
     try {
         const userId = req.user.id;
+        const key = String(userId);
 
         const currentUser = await users.findById(userId).select('blocking blocked_by').lean();
         if (!currentUser) return res.status(404).json({ success: false, message: 'Utilizator negăsit.' });
 
-        const blockedIds = [
-            ...(currentUser.blocking || []).map(id => id.toString()),
-            ...(currentUser.blocked_by || []).map(id => id.toString())
-        ];
+        const blockedIds = new Set([
+            ...(currentUser.blocking || []).map(id => String(id)),
+            ...(currentUser.blocked_by || []).map(id => String(id))
+        ]);
 
         const conversations = await Conversation.find({
             participants: userId,
             deleted_by: { $ne: userId }
-        }).populate('participants', '_id').lean();
+        }).select('participants unread_counts').lean();
 
         let totalUnread = 0;
 
         for (const conv of conversations) {
-            const otherParticipant = conv.participants.find(
-                p => p && p._id.toString() !== userId
-            );
-            if (otherParticipant && blockedIds.includes(otherParticipant._id.toString())) {
-                continue;
-            }
-            const count = conv.unread_counts?.[userId] || 0;
-            totalUnread += count;
+            const other = (conv.participants || []).map(p => String(p)).find(p => p !== key);
+            if (other && blockedIds.has(other)) continue;
+            totalUnread += readUnreadValue(conv.unread_counts, key);
         }
 
-        return res.json({ success: true, unreadCount: totalUnread });
+        return res.json({ success: true, unreadCount: totalUnread < 0 ? 0 : totalUnread });
 
     } catch (error) {
         console.error('❌ GET /api/chat/unread-count:', error);
@@ -443,24 +510,25 @@ chatRoute.get('/api/chat/unread-count', authUser, fetchLimiter, async (req, res)
 });
 
 
-// ==========================================
-// 7. PUT: Marchează conversație ca citită (REST fallback)
-// ==========================================
 chatRoute.put('/api/chat/conversations/:conversationId/read', authUser, fetchLimiter, async (req, res) => {
     try {
         const userId = req.user.id;
         const { conversationId } = req.params;
 
-        if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+        if (!isValidId(conversationId)) {
             return res.status(400).json({ success: false, message: 'ID invalid.' });
         }
 
-        await Conversation.findOneAndUpdate(
+        const conversation = await Conversation.findOneAndUpdate(
             { _id: conversationId, participants: userId },
             { $set: { [`unread_counts.${userId}`]: 0 } }
-        );
+        ).lean();
 
-        await Message.updateMany(
+        if (!conversation) {
+            return res.status(404).json({ success: false, message: 'Conversație negăsită.' });
+        }
+
+        const result = await Message.updateMany(
             {
                 conversation_id: conversationId,
                 sender_id: { $ne: userId },
@@ -468,6 +536,16 @@ chatRoute.put('/api/chat/conversations/:conversationId/read', authUser, fetchLim
             },
             { $set: { is_read: true } }
         );
+
+        const io = getIO();
+        if (io && result?.modifiedCount > 0) {
+            io.to(`conv_${conversationId}`).emit('messages_read', {
+                conversationId: String(conversationId),
+                readBy: String(userId)
+            });
+        }
+
+        emitUnreadTotal(userId).catch(() => {});
 
         return res.json({ success: true });
 
@@ -478,61 +556,85 @@ chatRoute.put('/api/chat/conversations/:conversationId/read', authUser, fetchLim
 });
 
 
-// ==========================================
-// 8. DELETE: Șterge mesaj (soft delete)
-// ==========================================
 chatRoute.delete('/api/chat/messages/:messageId', authUser, fetchLimiter, async (req, res) => {
     try {
         const { messageId } = req.params;
         const userId = req.user.id;
+
+        if (!isValidId(messageId)) {
+            return res.status(400).json({ success: false, message: 'ID invalid.' });
+        }
 
         const message = await Message.findById(messageId);
         if (!message) {
             return res.status(404).json({ success: false, message: 'Mesajul nu există.' });
         }
 
-        if (message.sender_id.toString() !== userId) {
+        if (String(message.sender_id) !== String(userId)) {
             return res.status(403).json({ success: false, message: 'Nu poți șterge acest mesaj.' });
         }
 
+        if (message.is_deleted) {
+            return res.json({ success: true });
+        }
+
         if (message.type === 'image' && message.image_public_id) {
-            await r2.send(new DeleteObjectCommand({
-                Bucket: process.env.R2_BUCKET_NAME,
-                Key: message.image_public_id
-            })).catch(() => {});
+            try {
+                await r2.send(new DeleteObjectCommand({
+                    Bucket: process.env.R2_BUCKET_NAME,
+                    Key: message.image_public_id
+                }));
+            } catch (r2Err) {
+                console.error('❌ R2 delete:', r2Err.message);
+            }
         }
 
         message.type = 'text';
-        message.text = 'Acest mesaj a fost șters';
+        message.text = DELETED_MESSAGE_TEXT;
         message.image_url = null;
         message.image_public_id = null;
         message.sale_preview = null;
         message.is_deleted = true;
         await message.save();
 
+        const conversationId = String(message.conversation_id);
+
         const lastMessage = await Message.findOne({ conversation_id: message.conversation_id })
             .sort({ _id: -1 })
+            .select('_id')
             .lean();
 
-        if (lastMessage && lastMessage._id.toString() === messageId) {
+        const isLast = !!lastMessage && String(lastMessage._id) === String(messageId);
+
+        if (isLast) {
             await Conversation.findByIdAndUpdate(message.conversation_id, {
-                last_message: 'Acest mesaj a fost șters',
+                last_message: DELETED_MESSAGE_TEXT,
                 last_message_type: 'text'
             });
         }
 
         const io = getIO();
         if (io) {
-            io.to(`conv_${message.conversation_id}`).emit('message_deleted', {
-                messageId: message._id,
-                conversationId: message.conversation_id
+            io.to(`conv_${conversationId}`).emit('message_deleted', {
+                messageId: String(message._id),
+                conversationId
             });
-            io.to(`conv_${message.conversation_id}`).emit('conversation_updated', {
-                conversationId: message.conversation_id,
-                last_message: 'Acest mesaj a fost șters',
-                last_message_type: 'text',
-                last_message_at: message.createdAt
-            });
+
+            if (isLast) {
+                const conversation = await Conversation.findById(message.conversation_id)
+                    .select('last_message_at')
+                    .lean();
+
+                io.to(`conv_${conversationId}`).emit('conversation_updated', {
+                    conversationId,
+                    senderId: String(userId),
+                    unreadIncrement: 0,
+                    silent: true,
+                    last_message: DELETED_MESSAGE_TEXT,
+                    last_message_type: 'text',
+                    last_message_at: conversation?.last_message_at || null
+                });
+            }
         }
 
         return res.json({ success: true });
@@ -543,28 +645,24 @@ chatRoute.delete('/api/chat/messages/:messageId', authUser, fetchLimiter, async 
     }
 });
 
-// ==========================================
-// 9. POST: Trimite mesaj cu link anunț
-// ==========================================
+
 chatRoute.post('/api/chat/send-sale-message', authUser, fetchLimiter, async (req, res) => {
     try {
         const userId = req.user.id;
         const { targetUserId, saleId, text } = req.body;
 
-        // ── Validări de bază ─────────────────────────────────────────
         if (!targetUserId || !saleId) {
             return res.status(400).json({ success: false, message: 'targetUserId și saleId sunt obligatorii.' });
         }
 
-        if (targetUserId === userId) {
+        if (String(targetUserId) === String(userId)) {
             return res.status(400).json({ success: false, message: 'Nu poți trimite mesaj pe propriul anunț.' });
         }
 
-        if (!mongoose.Types.ObjectId.isValid(targetUserId) || !mongoose.Types.ObjectId.isValid(saleId)) {
+        if (!isValidId(targetUserId) || !isValidId(saleId)) {
             return res.status(400).json({ success: false, message: 'ID-uri invalide.' });
         }
 
-        // ── Validare text (opțional, max 500 caractere) ──────────────
         let sanitizedText = null;
         if (text && typeof text === 'string') {
             const trimmed = text.trim();
@@ -576,13 +674,11 @@ chatRoute.post('/api/chat/send-sale-message', authUser, fetchLimiter, async (req
             }
         }
 
-        // ── Verificare block bilateral ───────────────────────────────
         const isBlocked = await checkBlocked(userId, targetUserId);
         if (isBlocked) {
             return res.status(403).json({ success: false, message: 'Nu poți trimite mesaje acestui utilizator.' });
         }
 
-        // ── Verificare target user există ────────────────────────────
         const targetUser = await users.findById(targetUserId).select('username icon').lean();
         if (!targetUser) {
             return res.status(404).json({ success: false, message: 'Utilizator negăsit.' });
@@ -596,14 +692,12 @@ chatRoute.post('/api/chat/send-sale-message', authUser, fetchLimiter, async (req
             return res.status(404).json({ success: false, message: 'Anunțul nu mai este disponibil.' });
         }
 
-        // ── Extragem prima imagine pentru preview ────────────────────
         let previewImageUrl = null;
         if (sale.media && sale.media.length > 0) {
-            const firstImage = sale.media.find(m => m.type === 'image');
-            previewImageUrl = firstImage ? firstImage.url : sale.media[0].url;
+            const firstImage = sale.media.find(m => m && m.type === 'image');
+            previewImageUrl = firstImage ? firstImage.url : (sale.media[0]?.url || null);
         }
 
-        // ── Creează sau găsește conversația ───────────────────────────
         let conversation = await Conversation.findOne({
             participants: { $all: [userId, targetUserId], $size: 2 }
         });
@@ -611,24 +705,12 @@ chatRoute.post('/api/chat/send-sale-message', authUser, fetchLimiter, async (req
         if (!conversation) {
             conversation = await Conversation.create({
                 participants: [userId, targetUserId],
-                unread_counts: { [userId]: 0, [targetUserId]: 0 }
+                unread_counts: { [String(userId)]: 0, [String(targetUserId)]: 0 }
             });
-        } else {
-            // Dacă vreunul a șters-o, o readucem
-            const deletedByArray = conversation.deleted_by || [];
-            const pullIds = [];
-            if (deletedByArray.some(id => id.toString() === userId)) pullIds.push(userId);
-            if (deletedByArray.some(id => id.toString() === targetUserId)) pullIds.push(targetUserId);
-            if (pullIds.length > 0) {
-                await Conversation.findByIdAndUpdate(conversation._id, {
-                    $pull: { deleted_by: { $in: pullIds } }
-                });
-            }
         }
 
-        const conversationId = conversation._id.toString();
+        const conversationId = String(conversation._id);
 
-        // ── Creează mesajul ──────────────────────────────────────────
         const newMessage = await Message.create({
             conversation_id: conversation._id,
             sender_id: userId,
@@ -642,55 +724,40 @@ chatRoute.post('/api/chat/send-sale-message', authUser, fetchLimiter, async (req
             }
         });
 
-        // ── Actualizează conversația ─────────────────────────────────
         const previewTitle = sale.title || 'Anunț';
+        const previewText = `🚗 ${previewTitle}`;
+        const now = new Date();
+
         await Conversation.findByIdAndUpdate(conversation._id, {
-            last_message: `🚗 ${previewTitle}`,
-            last_message_type: 'text',
-            last_message_at: new Date(),
-            $inc: { [`unread_counts.${targetUserId}`]: 1 },
-            $pull: { deleted_by: targetUserId }
+            last_message: previewText,
+            last_message_type: 'sale_link',
+            last_message_at: now,
+            $inc: { [`unread_counts.${String(targetUserId)}`]: 1 },
+            $pull: { deleted_by: { $in: [String(targetUserId), String(userId)] } }
         });
 
-        // ── Populează mesajul pentru emit ─────────────────────────────
         const populatedMessage = await Message.findById(newMessage._id)
             .populate('sender_id', 'username icon')
             .lean();
 
-        // ── Socket emit ──────────────────────────────────────────────
         const io = getIO();
         if (io) {
-            io.in(`user_${targetUserId}`).socketsJoin(`conv_${conversationId}`);
-            io.in(`user_${userId}`).socketsJoin(`conv_${conversationId}`);
+            io.in(`user_${String(targetUserId)}`).socketsJoin(`conv_${conversationId}`);
+            io.in(`user_${String(userId)}`).socketsJoin(`conv_${conversationId}`);
 
             io.to(`conv_${conversationId}`).emit('new_message', populatedMessage);
             io.to(`conv_${conversationId}`).emit('conversation_updated', {
                 conversationId,
-                last_message: `🚗 ${previewTitle}`,
-                last_message_type: 'text',
-                last_message_at: new Date()
+                senderId: String(userId),
+                unreadIncrement: 1,
+                silent: false,
+                last_message: previewText,
+                last_message_type: 'sale_link',
+                last_message_at: now
             });
         }
 
-        // ── FCM notificare ───────────────────────────────────────────
-        const senderData = await users.findById(userId).select('username icon').lean();
-        await sendAndSaveNotification(
-            [targetUserId],
-            {
-                type: 'NEW_MESSAGE',
-                title: senderData?.username || 'Mesaj nou',
-                body: `🚗 Ți-a trimis un mesaj despre "${previewTitle}"`,
-                saleId: null,
-                commentId: conversationId
-            },
-            {
-                id: userId,
-                name: senderData?.username || '',
-                image: senderData?.icon || ''
-            }
-        );
-
-        return res.json({
+        res.json({
             success: true,
             data: {
                 message: populatedMessage,
@@ -699,9 +766,37 @@ chatRoute.post('/api/chat/send-sale-message', authUser, fetchLimiter, async (req
             }
         });
 
+        setImmediate(async () => {
+            try {
+                emitUnreadTotal(targetUserId).catch(() => {});
+                const senderData = await users.findById(userId).select('username icon').lean();
+                await sendAndSaveNotification(
+                    [String(targetUserId)],
+                    {
+                        type: 'NEW_MESSAGE',
+                        title: senderData?.username || 'Mesaj nou',
+                        body: `🚗 Ți-a trimis un mesaj despre "${previewTitle}"`,
+                        saleId: null,
+                        commentId: conversationId
+                    },
+                    {
+                        id: userId,
+                        name: senderData?.username || '',
+                        image: senderData?.icon || ''
+                    }
+                );
+            } catch (err) {
+                console.error('❌ FCM send-sale-message:', err.message);
+            }
+        });
+
+        return;
+
     } catch (error) {
         console.error('❌ POST /api/chat/send-sale-message:', error);
-        return res.status(500).json({ success: false, message: 'Eroare server.' });
+        if (!res.headersSent) {
+            return res.status(500).json({ success: false, message: 'Eroare server.' });
+        }
     }
 });
 

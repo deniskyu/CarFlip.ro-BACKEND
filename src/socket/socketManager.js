@@ -2,6 +2,7 @@ import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import Redis from 'ioredis';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import Conversation from '../models/conversationModel.js';
 import Message from '../models/messageModel.js';
@@ -13,6 +14,78 @@ let redisClient = null;
 
 let ioInstance = null;
 export const getIO = () => ioInstance;
+
+const isValidId = (value) => {
+    if (!value) return false;
+    return mongoose.Types.ObjectId.isValid(String(value));
+};
+
+const readUnreadValue = (map, key) => {
+    if (!map) return 0;
+    if (map instanceof Map) return Number(map.get(key)) || 0;
+    if (typeof map === 'object') return Number(map[key]) || 0;
+    return 0;
+};
+
+export const computeUnreadTotal = async (userId) => {
+    try {
+        if (!isValidId(userId)) return null;
+        const key = String(userId);
+
+        const [currentUser, conversations] = await Promise.all([
+            users.findById(userId).select('blocking blocked_by').lean(),
+            Conversation.find({
+                participants: userId,
+                deleted_by: { $ne: userId }
+            }).select('participants unread_counts').lean()
+        ]);
+
+        if (!currentUser) return null;
+
+        const blockedIds = new Set([
+            ...(currentUser.blocking || []).map(id => String(id)),
+            ...(currentUser.blocked_by || []).map(id => String(id))
+        ]);
+
+        let total = 0;
+        for (const conv of conversations) {
+            const other = (conv.participants || []).find(p => String(p) !== key);
+            if (other && blockedIds.has(String(other))) continue;
+            total += readUnreadValue(conv.unread_counts, key);
+        }
+
+        return total < 0 ? 0 : total;
+    } catch (err) {
+        console.error('❌ computeUnreadTotal:', err.message);
+        return null;
+    }
+};
+
+export const emitUnreadTotal = async (userId) => {
+    try {
+        const io = getIO();
+        if (!io || !isValidId(userId)) return;
+        const total = await computeUnreadTotal(userId);
+        if (total === null) return;
+        io.to(`user_${String(userId)}`).emit('unread_count_updated', { total });
+    } catch (err) {
+        console.error('❌ emitUnreadTotal:', err.message);
+    }
+};
+
+export const emitConversationUpdate = (conversationId, payload) => {
+    try {
+        const io = getIO();
+        if (!io || !conversationId) return;
+        io.to(`conv_${String(conversationId)}`).emit('conversation_updated', Object.assign({
+            conversationId: String(conversationId),
+            unreadIncrement: 1,
+            silent: false,
+        }, payload || {}));
+    } catch (err) {
+        console.error('❌ emitConversationUpdate:', err.message);
+    }
+};
 
 const addOnlineUser = async (userId, socketId) => {
     try {
@@ -50,6 +123,45 @@ const isUserOnline = async (userId) => {
     }
 };
 
+const allowEvent = (socket, key, max, windowMs) => {
+    try {
+        const now = Date.now();
+        if (!socket.data) socket.data = {};
+        if (!socket.data.rateBuckets) socket.data.rateBuckets = {};
+        const bucket = socket.data.rateBuckets[key];
+        if (!bucket || (now - bucket.start) > windowMs) {
+            socket.data.rateBuckets[key] = { start: now, count: 1 };
+            return true;
+        }
+        if (bucket.count >= max) return false;
+        bucket.count += 1;
+        return true;
+    } catch (err) {
+        return true;
+    }
+};
+
+const ensureConversationRoom = async (socket, userId, conversationId) => {
+    const room = `conv_${conversationId}`;
+    if (socket.rooms.has(room)) return true;
+    const conversation = await isParticipant(conversationId, userId);
+    if (!conversation) return false;
+    await socket.join(room);
+    return true;
+};
+
+const isParticipant = async (conversationId, userId) => {
+    if (!isValidId(conversationId) || !isValidId(userId)) return null;
+    try {
+        return await Conversation.findOne({
+            _id: conversationId,
+            participants: userId
+        }).select('participants').lean();
+    } catch (err) {
+        return null;
+    }
+};
+
 export const initSocket = async (httpServer) => {
 
     const io = new Server(httpServer, {
@@ -59,7 +171,8 @@ export const initSocket = async (httpServer) => {
         },
         pingInterval: 25000,
         pingTimeout: 20000,
-        transports: ['websocket', 'polling']
+        transports: ['websocket', 'polling'],
+        maxHttpBufferSize: 1e6
     });
 
     ioInstance = io;
@@ -84,7 +197,8 @@ export const initSocket = async (httpServer) => {
             const token = socket.handshake.auth?.token;
             if (!token) return next(new Error('TOKEN_MISSING'));
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            socket.userId = decoded.id;
+            if (!decoded?.id || !isValidId(decoded.id)) return next(new Error('TOKEN_INVALID'));
+            socket.userId = String(decoded.id);
             next();
         } catch (err) {
             return next(new Error('TOKEN_INVALID'));
@@ -95,57 +209,60 @@ export const initSocket = async (httpServer) => {
         const userId = socket.userId;
 
         await addOnlineUser(userId, socket.id);
-        socket.join(`user_${userId}`);
+        await socket.join(`user_${userId}`);
 
         try {
             const conversations = await Conversation.find({
                 participants: userId,
                 deleted_by: { $ne: userId }
-            }).select('_id');
+            }).select('_id').lean();
 
             for (const conv of conversations) {
-                socket.join(`conv_${conv._id.toString()}`);
+                await socket.join(`conv_${String(conv._id)}`);
             }
         } catch (err) {
             console.error(`❌ Eroare la join conversații pentru ${userId}:`, err.message);
         }
 
-        // ─── EVENT: Trimitere mesaj text ──────────────────────────────────────
         socket.on('send_message', async (data, callback) => {
             try {
-                const { conversationId, text } = data;
+                if (!allowEvent(socket, 'send_message', 30, 10000)) {
+                    return callback?.({ success: false, message: 'Prea multe mesaje. Așteaptă puțin.' });
+                }
 
-                if (!conversationId || !text || !text.trim()) {
+                const conversationId = data?.conversationId ? String(data.conversationId) : null;
+                const rawText = typeof data?.text === 'string' ? data.text : '';
+                const clientId = data?.clientId ? String(data.clientId).slice(0, 64) : null;
+                const text = rawText.trim();
+
+                if (!conversationId || !isValidId(conversationId) || !text) {
                     return callback?.({ success: false, message: 'Date incomplete.' });
                 }
 
-                if (text.trim().length > 1000) {
+                if (text.length > 1000) {
                     return callback?.({ success: false, message: 'Mesajul depășește 1000 de caractere.' });
                 }
 
-                const conversation = await Conversation.findOne({
-                    _id: conversationId,
-                    participants: userId
-                });
+                const conversation = await isParticipant(conversationId, userId);
 
                 if (!conversation) {
                     return callback?.({ success: false, message: 'Conversație negăsită.' });
                 }
 
-                const recipientId = conversation.participants
-                    .find(p => p.toString() !== userId)
-                    ?.toString();
+                const recipientId = (conversation.participants || [])
+                    .map(p => String(p))
+                    .find(p => p !== userId);
 
                 if (!recipientId) {
                     return callback?.({ success: false, message: 'Recipient negăsit.' });
                 }
 
-                const senderUser = await users.findById(userId).select('blocking blocked_by').lean();
+                const senderUser = await users.findById(userId).select('blocking blocked_by username icon').lean();
                 if (!senderUser) return callback?.({ success: false, message: 'Utilizator negăsit.' });
 
                 const isBlocked =
-                    senderUser.blocking?.some(id => id.toString() === recipientId) ||
-                    senderUser.blocked_by?.some(id => id.toString() === recipientId);
+                    senderUser.blocking?.some(id => String(id) === recipientId) ||
+                    senderUser.blocked_by?.some(id => String(id) === recipientId);
 
                 if (isBlocked) {
                     return callback?.({ success: false, message: 'Nu poți trimite mesaje acestui utilizator.' });
@@ -155,55 +272,64 @@ export const initSocket = async (httpServer) => {
                     conversation_id: conversationId,
                     sender_id: userId,
                     type: 'text',
-                    text: text.trim()
+                    text
                 });
 
                 const populatedMessage = await Message.findById(newMessage._id)
                     .populate('sender_id', 'username icon')
                     .lean();
 
+                const preview = text.substring(0, 100);
+                const now = new Date();
+
                 await Conversation.findByIdAndUpdate(conversationId, {
-                    last_message: text.trim().substring(0, 100),
+                    last_message: preview,
                     last_message_type: 'text',
-                    last_message_at: new Date(),
+                    last_message_at: now,
                     $inc: { [`unread_counts.${recipientId}`]: 1 },
-                    $pull: { deleted_by: recipientId }
+                    $pull: { deleted_by: { $in: [recipientId, userId] } }
                 });
 
-                socket.join(`conv_${conversationId}`);
+                await socket.join(`conv_${conversationId}`);
+                io.in(`user_${recipientId}`).socketsJoin(`conv_${conversationId}`);
 
-                io.to(`conv_${conversationId}`).emit('new_message', populatedMessage);
+                const broadcastMessage = clientId
+                    ? Object.assign({}, populatedMessage, { client_id: clientId })
+                    : populatedMessage;
 
-                socket.to(`conv_${conversationId}`).emit('conversation_updated', {
+                io.to(`conv_${conversationId}`).emit('new_message', broadcastMessage);
+
+                io.to(`conv_${conversationId}`).emit('conversation_updated', {
                     conversationId,
-                    last_message: text.trim().substring(0, 100),
+                    senderId: userId,
+                    unreadIncrement: 1,
+                    silent: false,
+                    last_message: preview,
                     last_message_type: 'text',
-                    last_message_at: new Date()
+                    last_message_at: now
                 });
 
-                // ─── FCM trimis mereu ─────────────────────────────────────────
-                // isUserOnline() nu e de încredere pe mobile: socketul rămâne
-                // "conectat" în Redis până la 45s după ce userul a închis app-ul.
-                // Frontend-ul filtrează corect: onMessage ignoră NEW_MESSAGE în foreground.
-                const senderData = await users.findById(userId).select('username icon').lean();
-                await sendAndSaveNotification(
-                    [recipientId],
-                    {
-                        type: 'NEW_MESSAGE',
-                        title: senderData?.username || 'Mesaj nou',
-                        body: text.trim().substring(0, 100),
-                        saleId: null,
-                        commentId: conversationId
-                    },
-                    {
-                        id: userId,
-                        name: senderData?.username || '',
-                        image: senderData?.icon || ''
-                    }
-                );
-                // ─────────────────────────────────────────────────────────────
+                callback?.({ success: true, message: broadcastMessage });
 
-                callback?.({ success: true, message: populatedMessage });
+                setImmediate(() => {
+                    emitUnreadTotal(recipientId).catch(() => {});
+
+                    sendAndSaveNotification(
+                        [recipientId],
+                        {
+                            type: 'NEW_MESSAGE',
+                            title: senderUser?.username || 'Mesaj nou',
+                            body: preview,
+                            saleId: null,
+                            commentId: conversationId
+                        },
+                        {
+                            id: userId,
+                            name: senderUser?.username || '',
+                            image: senderUser?.icon || ''
+                        }
+                    ).catch((err) => console.error('❌ FCM send_message:', err.message));
+                });
 
             } catch (err) {
                 console.error('❌ Eroare send_message:', err.message);
@@ -211,66 +337,105 @@ export const initSocket = async (httpServer) => {
             }
         });
 
-        // ─── EVENT: Mesaj imagine (fallback socket după upload REST) ─────────
         socket.on('image_message_sent', async (data) => {
             try {
-                const { conversationId, messageId } = data;
-                if (!conversationId || !messageId) return;
-                const conversation = await Conversation.findOne({
-                    _id: conversationId,
-                    participants: userId
-                });
+                if (!allowEvent(socket, 'image_message_sent', 20, 10000)) return;
+                const conversationId = data?.conversationId ? String(data.conversationId) : null;
+                if (!conversationId) return;
+                const conversation = await isParticipant(conversationId, userId);
                 if (!conversation) return;
-                socket.join(`conv_${conversationId}`);
+                await socket.join(`conv_${conversationId}`);
             } catch (err) {
                 console.error('❌ Eroare image_message_sent:', err.message);
             }
         });
 
-        // ─── EVENT: Join conversație nouă ────────────────────────────────────
-        socket.on('join_conversation', (conversationId) => {
-            if (conversationId) socket.join(`conv_${conversationId}`);
-        });
-
-        // ─── EVENT: Typing indicator ──────────────────────────────────────────
-        socket.on('typing_start', ({ conversationId }) => {
-            if (!conversationId) return;
-            socket.to(`conv_${conversationId}`).emit('typing_start', { userId, conversationId });
-        });
-
-        socket.on('typing_stop', ({ conversationId }) => {
-            if (!conversationId) return;
-            socket.to(`conv_${conversationId}`).emit('typing_stop', { userId, conversationId });
-        });
-
-        // ─── EVENT: Marchează mesaje ca citite ───────────────────────────────
-        socket.on('mark_read', async ({ conversationId }) => {
+        socket.on('join_conversation', async (conversationId) => {
             try {
-                if (!conversationId) return;
-                await Conversation.findOneAndUpdate(
-                    { _id: conversationId, participants: userId },
-                    { $set: { [`unread_counts.${userId}`]: 0 } }
-                );
-                await Message.updateMany(
-                    { conversation_id: conversationId, sender_id: { $ne: userId }, is_read: false },
-                    { $set: { is_read: true } }
-                );
-                socket.to(`conv_${conversationId}`).emit('messages_read', {
-                    conversationId,
-                    readBy: userId
-                });
+                if (!allowEvent(socket, 'join_conversation', 40, 10000)) return;
+                const id = conversationId ? String(conversationId) : null;
+                if (!id) return;
+                await ensureConversationRoom(socket, userId, id);
             } catch (err) {
-                console.error('❌ Eroare mark_read:', err.message);
+                console.error('❌ Eroare join_conversation:', err.message);
             }
         });
 
-        // ─── EVENT: Deconectare ───────────────────────────────────────────────
-        socket.on('disconnect', async (reason) => {
+        socket.on('typing_start', async ({ conversationId } = {}) => {
+            try {
+                if (!conversationId) return;
+                if (!allowEvent(socket, 'typing', 60, 10000)) return;
+                const id = String(conversationId);
+                const allowed = await ensureConversationRoom(socket, userId, id);
+                if (!allowed) return;
+                socket.to(`conv_${id}`).emit('typing_start', { userId, conversationId: id });
+            } catch (err) {
+                console.error('❌ Eroare typing_start:', err.message);
+            }
+        });
+
+        socket.on('typing_stop', async ({ conversationId } = {}) => {
+            try {
+                if (!conversationId) return;
+                if (!allowEvent(socket, 'typing', 60, 10000)) return;
+                const id = String(conversationId);
+                const allowed = await ensureConversationRoom(socket, userId, id);
+                if (!allowed) return;
+                socket.to(`conv_${id}`).emit('typing_stop', { userId, conversationId: id });
+            } catch (err) {
+                console.error('❌ Eroare typing_stop:', err.message);
+            }
+        });
+
+        socket.on('mark_read', async (data, callback) => {
+            try {
+                if (!allowEvent(socket, 'mark_read', 40, 10000)) {
+                    return callback?.({ success: false });
+                }
+                const conversationId = data?.conversationId ? String(data.conversationId) : null;
+                if (!conversationId || !isValidId(conversationId)) {
+                    return callback?.({ success: false });
+                }
+
+                const updated = await Conversation.findOneAndUpdate(
+                    { _id: conversationId, participants: userId },
+                    { $set: { [`unread_counts.${userId}`]: 0 } }
+                ).lean();
+
+                if (!updated) return callback?.({ success: false });
+
+                const result = await Message.updateMany(
+                    { conversation_id: conversationId, sender_id: { $ne: userId }, is_read: false },
+                    { $set: { is_read: true } }
+                );
+
+                if (result?.modifiedCount > 0) {
+                    socket.to(`conv_${conversationId}`).emit('messages_read', {
+                        conversationId,
+                        readBy: userId
+                    });
+                }
+
+                const unreadTotal = await computeUnreadTotal(userId);
+
+                if (unreadTotal !== null) {
+                    io.to(`user_${userId}`).emit('unread_count_updated', { total: unreadTotal });
+                }
+
+                callback?.({ success: true, unreadTotal: unreadTotal === null ? undefined : unreadTotal });
+
+            } catch (err) {
+                console.error('❌ Eroare mark_read:', err.message);
+                callback?.({ success: false });
+            }
+        });
+
+        socket.on('disconnect', async () => {
             await removeOnlineUser(userId, socket.id);
         });
 
         socket.on('error', (err) => {
-            console.error(`❌ Eroare socket pentru ${userId}:`, err.message);
+            console.error(`❌ Eroare socket pentru ${userId}:`, err?.message);
         });
     });
 

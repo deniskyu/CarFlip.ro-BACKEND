@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+const RETENTION_MS = 30 * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000;
+
 const messageSchema = new mongoose.Schema({
     conversation_id: {
         type: mongoose.Schema.Types.ObjectId,
@@ -32,29 +34,30 @@ const messageSchema = new mongoose.Schema({
     },
     image_public_id: {
         type: String,
-        default: null  // Pentru ștergerea din R2
+        default: null
     },
     is_read: {
         type: Boolean,
         default: false
     },
-    is_deleted: { type: Boolean, default: false },
-    // TTL index — MongoDB șterge automat documentul după 30 zile
+    is_deleted: {
+        type: Boolean,
+        default: false
+    },
     expires_at: {
         type: Date,
-        default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000)
+        default: () => new Date(Date.now() + RETENTION_MS)
     }
 }, { timestamps: true });
 
-// TTL index — MongoDB rulează un job intern la fiecare 60 secunde
-// și șterge automat documentele unde expires_at a trecut
-messageSchema.index({ expires_at: 1 });
-
-// Indexuri pentru performanță
+messageSchema.index({ conversation_id: 1, _id: -1 });
 messageSchema.index({ conversation_id: 1, createdAt: -1 });
+messageSchema.index({ conversation_id: 1, sender_id: 1, is_read: 1 });
 messageSchema.index({ sender_id: 1 });
+messageSchema.index({ expires_at: 1 });
+messageSchema.index({ expires_at: 1, type: 1, image_public_id: 1 });
 
-const Message = mongoose.models.messages || 
+const Message = mongoose.models.messages ||
     mongoose.model('messages', messageSchema);
 
 export default Message;
