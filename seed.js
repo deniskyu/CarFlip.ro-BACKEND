@@ -25,8 +25,8 @@ import fs from 'fs-extra';
 import path from 'path';
 import { addMonths, addDays } from 'date-fns';
 
-import sales from './models/salesModel.js';
-import { addMediaToQueue } from './mediaProcessing/mediaQueue.js';
+import sales from './src/models/salesModel.js';
+import { addMediaToQueue } from './src/mediaProcessing/mediaQueue.js';
 
 const DEALER_ID   = '6a7a583fee365e699b5e551c';
 const DEALER_NAME = 'RbsAuto';
