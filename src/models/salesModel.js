@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { generateSaleSlug } from "../utils/slug.js";
 
 const socialPlatformState = {
     status: {
@@ -25,6 +26,7 @@ const saleSchema = new mongoose.Schema({
     user_name: { type: String },
     user_image: { type: String },
     title: { type: String, required: true, maxlength: 35 },
+    slug: { type: String, trim: true, lowercase: true },
     brand: {
         id: { type: Number, required: true },
         name: { type: String, required: true }
@@ -116,6 +118,28 @@ saleSchema.index({ "social_promo.facebook.posted_at": -1 });
 saleSchema.index({ "social_promo.tiktok.posted_at": -1 });
 saleSchema.index({ allow_social_promo: 1, is_active: 1, status: 1, "social_promo.facebook.status": 1, createdAt: 1 });
 saleSchema.index({ allow_social_promo: 1, is_active: 1, status: 1, "social_promo.tiktok.status": 1, createdAt: 1 });
+saleSchema.index({ slug: 1 }, { unique: true, sparse: true });
+
+// Catalogul unui dealer, sortat. Indexul { user_id: 1, _id: -1 } există deja
+// mai sus și acoperă sortarea implicită („cele mai noi"), deci nu se repetă.
+saleSchema.index({ user_id: 1, is_active: 1, price: 1 });            // sortare după preț
+saleSchema.index({ user_id: 1, is_active: 1, production_year: -1 }); // sortare după an
+saleSchema.index({ user_id: 1, is_active: 1, mileage: 1 });          // sortare
+
+
+saleSchema.pre('save', function (next) {
+    if (this.slug) return next();
+    try {
+        this.slug = generateSaleSlug(this);
+    } catch (err) {
+        // Nu blocăm postarea unui anunț dacă slug-ul nu se poate genera.
+        // Anunțul intră fără slug, iar backfill-ul îl prinde la următoarea rulare.
+        console.warn(`⚠️ Nu am putut genera slug pentru anunț: ${err.message}`);
+    }
+    next();
+});
+
+
 
 const sales = mongoose.models.sales || mongoose.model("sales", saleSchema);
 export default sales;
