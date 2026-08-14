@@ -14,7 +14,8 @@ import adminRoute from './src/routes/adminRoute.js';
 import adminParcuriRoute from './src/routes/adminParcuriRoute.js';
 import resolveParc from './src/middleware/resolveParc.js';
 import siteTestRoute from './src/routes/siteTestRoute.js';
-
+import siteApiRoute from './src/routes/siteApiRoute.js';
+import siteSeoRoute from './src/routes/siteSeoRoute.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -99,7 +100,14 @@ app.use((req, res, next) => {
 });
 
 app.use(resolveParc);
-app.use(siteTestRoute);
+
+// API-ul și SEO-ul site-urilor, ÎNAINTE de ruta de test.
+// Ordinea contează: garda anti-scurgere din siteTestRoute oprește orice cale
+// nerezolvată, deci rutele reale trebuie să apuce request-ul primele.
+app.use(siteApiRoute);
+app.use(siteSeoRoute);
+
+app.use(siteTestRoute);   // TEMPORAR — se șterge la Batch 6
 
 app.use(adminRoute);
 app.use(adminParcuriRoute);

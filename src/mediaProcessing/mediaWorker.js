@@ -6,6 +6,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import sales from '../models/salesModel.js'; 
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'; 
+import { onStockChange } from '../services/seo/onStockChange.js';
 //import Stripe from 'stripe';
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -198,12 +199,15 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
             console.log('🔍 finalMediaUrls înainte de DB write:', JSON.stringify(finalMediaUrls, null, 2));
 
             // ── SUCCES: Swap atomic în DB — fără să atingem status sau is_active ──
-            await sales.findByIdAndUpdate(
+            const updatedForSeo = await sales.findByIdAndUpdate(
                 saleId,
                 { $set: { media: finalMediaUrls } },
                 { new: true }
             );
-
+            if (updatedForSeo?.is_active) {
+                onStockChange(updatedForSeo.user_id, { slugs: [updatedForSeo.slug] }).catch(() => {});
+            }
+            
             try {
                 await sales.updateOne(
                     { _id: saleId, 'social_promo.facebook.status': 'skipped' },
@@ -397,6 +401,12 @@ export const mediaWorker = new Worker('MediaProcessingQueue', async job => {
         if (updatedSale && updatedSale.status === 'active' && updatedSale.is_active && !updatedSale.alerts_sent) {
             await sales.findByIdAndUpdate(saleId, { alerts_sent: true });
             triggerSearchAlerts(updatedSale).catch(err => console.error(`eroare la trimiterea notificarile alerte: ${err}`));
+        }
+
+        // Stocul dealerului s-a schimbat: invalidăm filtrele, recalculăm
+        // `indexable` și anunțăm IndexNow. Best-effort — nu blochează worker-ul.
+        if (updatedSale?.is_active) {
+            onStockChange(updatedSale.user_id, { slugs: [updatedSale.slug] }).catch(() => {});
         }
 
         // Ștergem fișierele ORIGINALE doar la succes complet

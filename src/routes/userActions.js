@@ -17,6 +17,7 @@ import { addMediaToQueue } from '../mediaProcessing/mediaQueue.js'; // <--- NOU:
 import { sendAndSaveNotification } from '../services/notificationService.js';
 import { addMediaUpdateToQueue } from '../mediaProcessing/mediaQueue.js';
 import { enqueueSocialCleanup } from '../services/socialPromo/socialPromoService.js';
+import { onStockChange } from '../services/seo/onStockChange.js';
 //import Stripe from 'stripe';
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -1832,6 +1833,8 @@ userActions.delete('/api/sales/remove/:id', authUser, fetchLimiter, async (req, 
         // 6. Lovitura de grație: Ștergem anunțul propriu-zis
         await sales.findByIdAndDelete(id);
 
+        onStockChange(sale.user_id, { removed: true }).catch(() => {});
+
         return res.json({ 
             success: true, 
             message: "Anunțul și toate datele asociate au fost șterse complet." 
@@ -1920,6 +1923,8 @@ userActions.post('/api/sales/reactivate/:id', authUser, fetchLimiter, async (req
         sale.expires_at = expiresAt;
         //sale.stripe_subscription_id = null; // Fără abonament asociat
         await sale.save();
+
+        onStockChange(sale.user_id, { slugs: [sale.slug] }).catch(() => {});
 
         return res.json({
             success: true,
