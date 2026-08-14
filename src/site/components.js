@@ -1,0 +1,353 @@
+import { html, raw } from './html.js';
+import { SERVICE_ICONS, DEFAULT_ICON } from '../utils/serviceIcons.js';
+import { formatPhoneDisplay } from '../utils/phone.js';
+
+// ============================================================================
+//  src/site/components.js
+// ----------------------------------------------------------------------------
+//  Componentele comune. Fiecare e o funcție pură: primește date, întoarce
+//  markup. Fără efecte secundare, fără acces la baza de date, fără `req`.
+//
+//  Asta le face testabile în izolare — le pot randa cu date fabricate și
+//  inspecta ieșirea, ceea ce cu template literals împrăștiate prin rute nu s-ar
+//  putea.
+//
+//  Variantele (`a`, `b`, `c`, `d`) vin din presetare. Nu se combină liber:
+//  vezi comentariul din presets.js.
+// ============================================================================
+
+const PLAY_STORE = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe';
+const APP_STORE = 'https://apps.apple.com/ro/app/id6760683057';
+
+const DAY_NAMES = ['Duminică', 'Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri', 'Sâmbătă'];
+const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+// ─── Iconițe inline ─────────────────────────────────────────────────────────
+// `stroke="currentColor"` → preiau automat culoarea contextului, deci aceeași
+// iconiță arată corect și pe fundal deschis, și pe accent, fără variante.
+const icon = (body, size = 20) => raw(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" ` +
+    `fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ` +
+    `stroke-linejoin="round" aria-hidden="true" focusable="false">${body}</svg>`
+);
+
+export const ICONS = {
+    phone: (s) => icon(`<path d="M8.5 3.5h-3a2 2 0 0 0-2 2.2c.6 6.5 5.3 11.2 11.8 11.8a2 2 0 0 0 2.2-2v-3l-3.5-1.2-1.8 1.8a13 13 0 0 1-4.3-4.3l1.8-1.8L8.5 3.5z"/>`, s),
+    whatsapp: (s) => icon(`<path d="M3.5 20.5l1.3-4.4A8.4 8.4 0 1 1 8 19.3l-4.5 1.2z"/><path d="M9 9.2c.2 1 .7 2 1.5 2.8s1.8 1.3 2.8 1.5l1-1.2 2 .8v1.6c-2.7.3-5.3-1-6.9-2.6S8 8.5 8.3 5.8h1.6l.8 2L9 9.2z"/>`, s),
+    menu: (s) => icon(`<path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/>`, s),
+    arrow: (s) => icon(`<path d="M5 12h13"/><path d="m12 5 7 7-7 7"/>`, s),
+    pin: (s) => icon(`<path d="M12 21.5s7-6.3 7-11.2a7 7 0 1 0-14 0c0 4.9 7 11.2 7 11.2z"/><circle cx="12" cy="10" r="2.6"/>`, s),
+    clock: (s) => icon(`<circle cx="12" cy="12" r="9"/><path d="M12 7v5.3l3.5 2"/>`, s),
+    facebook: (s) => icon(`<path d="M14 8.5h2.5V5.5H14a3.5 3.5 0 0 0-3.5 3.5v2H8.5v3h2v6.5h3v-6.5h2.3l.7-3h-3v-1.7c0-.5.4-.8 1-.8z"/>`, s),
+    instagram: (s) => icon(`<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="3.8"/><circle cx="17" cy="7" r="1"/>`, s),
+    tiktok: (s) => icon(`<path d="M15 4.5c.6 2 2 3.3 4 3.6v3c-1.6 0-3-.5-4.2-1.4v5.6a5.6 5.6 0 1 1-4.7-5.5v3.1a2.6 2.6 0 1 0 1.9 2.5V4.5z"/>`, s),
+    apple: (s) => icon(`<path d="M15.5 12.4c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.15-2.8.85-3.5.85s-1.8-.83-3-.8c-1.5.02-2.9.9-3.7 2.25-1.6 2.75-.4 6.8 1.1 9 .75 1.1 1.6 2.3 2.8 2.25 1.1-.05 1.5-.7 2.9-.7s1.7.7 2.9.7c1.2 0 2-1.1 2.7-2.2.85-1.25 1.2-2.5 1.2-2.55-.03-.02-2.3-.9-2.3-3.5z"/><path d="M13.4 5.6c.6-.75 1-1.8.9-2.85-.87.04-1.93.58-2.56 1.32-.56.65-1.05 1.72-.92 2.73.97.08 1.96-.5 2.58-1.2z"/>`, s),
+    play: (s) => icon(`<path d="M4.5 3.2 15 12 4.5 20.8a1 1 0 0 1-.5-.9V4.1a1 1 0 0 1 .5-.9z"/><path d="m15 12 4.3-3.6a1 1 0 0 1 0 1.7z" fill="currentColor"/><path d="M4.6 3.1 15 12"/>`, s),
+};
+
+const svcIcon = (name, size = 22) =>
+    icon((SERVICE_ICONS[name] || SERVICE_ICONS[DEFAULT_ICON]).body, size);
+
+// ════════════════════════════════════════════════════════════════════════════
+//  HEADER
+// ════════════════════════════════════════════════════════════════════════════
+
+const NAV = [
+    { href: '/', label: 'Acasă', key: 'home' },
+    { href: '/stoc', label: 'Stoc mașini', key: 'stoc' },
+    { href: '/contact', label: 'Contact', key: 'contact' },
+];
+
+/**
+ * Header. Telefonul e VIZIBIL pe orice lățime, ca buton de apelare.
+ * Dealerii vând prin telefon; pe mobil e cel mai eficient element de conversie
+ * din tot site-ul, deci nu are voie să se ascundă în meniul hamburger.
+ */
+export const Header = (parc, { current } = {}) => {
+    const tel = `tel:+${parc.phone}`;
+    return html`
+<header class="site-header">
+  <div class="wrap">
+    <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true">
+    <div class="header-inner">
+      <a class="brand" href="/">
+        <img class="brand-logo" src="${parc.logo_url}" alt="" width="42" height="42" fetchpriority="high">
+        <span class="brand-name">${parc.display_name}
+          <span class="brand-city">${parc.city}${parc.county ? `, ${parc.county}` : ''}</span>
+        </span>
+      </a>
+
+      <nav class="nav" aria-label="Meniu principal">
+        ${NAV.map((n) => html`<a href="${n.href}"${current === n.key ? raw(' aria-current="page"') : ''}>${n.label}</a>`)}
+      </nav>
+
+      <div class="header-cta">
+        <a class="header-phone" href="${tel}">
+          ${ICONS.phone(17)}<span>${formatPhoneDisplay(parc.phone)}</span>
+        </a>
+        <label class="nav-btn" for="nav-toggle" aria-label="Deschide meniul">${ICONS.menu(20)}</label>
+      </div>
+    </div>
+
+    <nav class="nav-mobile" aria-label="Meniu mobil">
+      ${NAV.map((n) => html`<a href="${n.href}">${n.label}</a>`)}
+    </nav>
+  </div>
+</header>`;
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+//  HERO
+// ════════════════════════════════════════════════════════════════════════════
+
+export const Hero = (parc, { total, preset }) => {
+    const centered = preset.variants.hero === 'b' || preset.variants.hero === 'd';
+    const title = parc.hero_title || `Mașini verificate în ${parc.city}`;
+    const sub = parc.hero_subtitle || '';
+
+    return html`
+<section class="hero ${centered ? 'hero--center' : ''}">
+  <div class="hero-media">
+    <img src="${parc.banner_url}" alt=""
+         width="1920" height="640"
+         fetchpriority="high" decoding="async">
+  </div>
+  <div class="hero-scrim"></div>
+  <div class="wrap">
+    <div class="hero-inner">
+      <h1>${title}</h1>
+      ${sub ? html`<p class="hero-sub">${sub}</p>` : ''}
+      ${total > 0 ? html`
+      <div class="hero-count">
+        <b>${total}</b> ${total === 1 ? 'autovehicul disponibil' : 'autovehicule disponibile'}
+      </div>` : ''}
+      <div class="hero-actions">
+        <a class="btn btn--on-dark" href="/stoc">Vezi mașinile noastre ${ICONS.arrow(17)}</a>
+        <a class="btn btn--outline-light" href="/contact">${ICONS.pin(17)} Unde ne găsești</a>
+      </div>
+    </div>
+  </div>
+</section>`;
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+//  CARD DE MAȘINĂ
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * `width` și `height` pe <img> vin din baza de date (le scrie mediaWorker).
+ * Împreună cu `aspect-ratio` din CSS, rezervă spațiul înainte ca poza să se
+ * încarce → CLS zero, pe care Google îl măsoară direct.
+ *
+ * `loading="lazy"` peste primele două imagini: primele sunt deasupra pliului
+ * și trebuie să pornească imediat.
+ */
+export const CarCard = (car, { dense = false, eager = false } = {}) => {
+    const specs = [
+        car.year,
+        car.mileage_fmt,
+        car.fuel,
+        car.horsepower ? `${car.horsepower} CP` : null,
+        car.transmission,
+    ].filter(Boolean);
+
+    const media = car.cover
+        ? html`<img src="${car.cover.url}" alt="${car.cover.alt}"
+                 ${car.cover.width ? raw(`width="${car.cover.width}"`) : ''}
+                 ${car.cover.height ? raw(`height="${car.cover.height}"`) : ''}
+                 loading="${eager ? 'eager' : 'lazy'}"
+                 ${eager ? raw('fetchpriority="high"') : raw('decoding="async"')}>`
+        : html`<div style="width:100%;height:100%"></div>`;
+
+    return html`
+<article class="car ${dense ? 'car--dense' : ''} reveal">
+  <a class="car-media" href="${car.url}" aria-label="${car.name} ${car.year}">
+    ${media}
+    ${dense ? '' : html`<span class="car-price">${car.price_fmt}</span>`}
+    ${!dense && car.negotiable ? html`<span class="car-neg">negociabil</span>` : ''}
+  </a>
+  <div class="car-body">
+    ${dense ? html`
+    <div class="car-priceline">
+      <span class="car-price">${car.price_fmt}</span>
+      ${car.negotiable ? html`<span class="car-neg">negociabil</span>` : ''}
+    </div>` : ''}
+    <h3 class="car-title"><a href="${car.url}">${car.title || car.name}</a></h3>
+    <ul class="car-specs">${specs.map((s) => html`<li>${s}</li>`)}</ul>
+    <div class="car-foot">
+      <a class="car-wa" href="${car.whatsapp_url}" target="_blank" rel="noopener nofollow">
+        ${ICONS.whatsapp(17)} Întreabă pe WhatsApp
+      </a>
+    </div>
+  </div>
+</article>`;
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+//  SERVICII
+// ════════════════════════════════════════════════════════════════════════════
+
+export const Services = (parc, { preset }) => {
+    const list = Array.isArray(parc.services) ? parc.services : [];
+    // Gol → secțiunea nu se randează deloc. Niciodată un titlu de secțiune cu
+    // spațiu alb dedesubt.
+    if (list.length === 0) return '';
+
+    const v = preset.variants.services;
+    const cls = v === 'b' || v === 'c' ? 'svc svc--row' : v === 'd' ? 'svc svc--num' : 'svc';
+
+    return html`
+<section class="section section--tint">
+  <div class="wrap">
+    <div class="section-head">
+      <p class="eyebrow">Servicii</p>
+      <h2>${parc.services_title || 'Ce oferim'}</h2>
+    </div>
+    <div class="svc-grid">
+      ${list.map((s, i) => html`
+      <div class="${cls} reveal">
+        ${v === 'd' ? html`<span class="svc-no">0${i + 1}</span>` : ''}
+        <span class="svc-icon">${svcIcon(s.icon, v === 'b' || v === 'c' ? 20 : 24)}</span>
+        <div>
+          <h3>${s.title}</h3>
+          <p>${s.text}</p>
+        </div>
+      </div>`)}
+    </div>
+  </div>
+</section>`;
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+//  BANDĂ DE CONTACT
+// ════════════════════════════════════════════════════════════════════════════
+
+export const CtaBand = (parc, { whatsappUrl }) => html`
+<section class="cta-band">
+  <div class="wrap cta-inner">
+    <div>
+      <h2>Ai găsit ceva care îți place?</h2>
+      <p>Scrie-ne pe WhatsApp sau sună direct. Îți răspundem rapid.</p>
+    </div>
+    <div class="cta-actions">
+      <a class="btn btn--on-dark" href="${whatsappUrl}" target="_blank" rel="noopener nofollow">
+        ${ICONS.whatsapp(18)} Scrie pe WhatsApp
+      </a>
+      <a class="cta-phone" href="tel:+${parc.phone}">
+        ${ICONS.phone(18)} ${formatPhoneDisplay(parc.phone)}
+      </a>
+    </div>
+  </div>
+</section>`;
+
+// ════════════════════════════════════════════════════════════════════════════
+//  FOOTER
+// ════════════════════════════════════════════════════════════════════════════
+
+export const Footer = (parc) => {
+    const schedule = Array.isArray(parc.schedule) ? parc.schedule : [];
+    const byDay = new Map(schedule.map((d) => [Number(d.day), d]));
+
+    const socials = [
+        parc.facebook_url && { url: parc.facebook_url, icon: ICONS.facebook(18), label: 'Facebook' },
+        parc.instagram_url && { url: parc.instagram_url, icon: ICONS.instagram(18), label: 'Instagram' },
+        parc.tiktok_url && { url: parc.tiktok_url, icon: ICONS.tiktok(18), label: 'TikTok' },
+    ].filter(Boolean);
+
+    const year = new Date().getFullYear();
+
+    return html`
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-grid">
+
+      <div>
+        <div class="footer-brand">
+          <img src="${parc.logo_url}" alt="" width="44" height="44" loading="lazy">
+          <strong>${parc.display_name}</strong>
+        </div>
+        <p style="font-size:.9rem;opacity:.8;line-height:1.7">
+          ${ICONS.pin(15)} ${parc.address}, ${parc.city}, ${parc.county}
+        </p>
+        ${socials.length ? html`
+        <div class="footer-social">
+          ${socials.map((s) => html`
+          <a href="${s.url}" target="_blank" rel="noopener nofollow" aria-label="${s.label}">${s.icon}</a>`)}
+        </div>` : ''}
+
+        <div class="store-badges">
+          <a class="store-badge" href="${APP_STORE}" target="_blank" rel="noopener">
+            ${ICONS.apple(20)}<span>Descarcă din<b>App Store</b></span>
+          </a>
+          <a class="store-badge" href="${PLAY_STORE}" target="_blank" rel="noopener">
+            ${ICONS.play(20)}<span>Disponibilă pe<b>Google Play</b></span>
+          </a>
+        </div>
+      </div>
+
+      <div>
+        <h4>Secțiuni</h4>
+        <ul class="footer-list">
+          ${NAV.map((n) => html`<li><a href="${n.href}">${n.label}</a></li>`)}
+        </ul>
+        <h4 style="margin-top:1.6rem">Contact</h4>
+        <ul class="footer-list">
+          <li><a href="tel:+${parc.phone}">${formatPhoneDisplay(parc.phone)}</a></li>
+          ${parc.email ? html`<li><a href="mailto:${parc.email}">${parc.email}</a></li>` : ''}
+        </ul>
+      </div>
+
+      <div>
+        <h4>${ICONS.clock(14)} Program</h4>
+        ${DAY_ORDER.map((d) => {
+            const day = byDay.get(d);
+            const closed = !day || day.closed;
+            return html`
+        <div class="footer-hours ${closed ? 'is-closed' : ''}">
+          <span>${DAY_NAMES[d]}</span>
+          <span>${closed ? 'Închis' : `${day.open} – ${day.close}`}</span>
+        </div>`;
+        })}
+      </div>
+
+    </div>
+
+    <div class="footer-legal">
+      <p class="footer-firm">
+        ${parc.company_name} · CUI ${parc.company_cui} · Reg. Com. ${parc.company_reg}<br>
+        Sediu social: ${parc.company_address}
+      </p>
+      <div class="footer-links">
+        <a href="/termeni">Termeni și condiții</a>
+        <a href="/confidentialitate">Politica de confidențialitate</a>
+        <a href="/cookies">Politica de cookie-uri</a>
+      </div>
+      <div class="footer-made">
+        <span>© ${year} ${parc.display_name}. Toate drepturile rezervate.</span>
+        <span>Site realizat de <a href="https://car-flip.com" target="_blank" rel="noopener">CarFlip</a></span>
+      </div>
+    </div>
+  </div>
+</footer>`;
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+//  STICKY WHATSAPP
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Poziția e FIXĂ dreapta-jos, pe toate presetările. Nu e limitare tehnică:
+ * acolo ajunge degetul mare pe telefon, e convenția pe care o recunoaște
+ * toată lumea și nu acoperă conținut. Variază doar forma.
+ */
+export const StickyWhatsapp = (parc, { whatsappUrl, preset }) => {
+    const v = preset.variants.sticky;
+    const mod = v === 'circle' ? 'sticky-wa--circle' : v === 'bar' ? 'sticky-wa--bar' : '';
+    return html`
+<a class="sticky-wa ${mod}" href="${whatsappUrl}" target="_blank" rel="noopener nofollow"
+   aria-label="Scrie-ne pe WhatsApp">
+  ${ICONS.whatsapp(v === 'circle' ? 26 : 19)}<span>Scrie pe WhatsApp</span>
+</a>`;
+};
+
+export default { Header, Hero, CarCard, Services, CtaBand, Footer, StickyWhatsapp, ICONS };

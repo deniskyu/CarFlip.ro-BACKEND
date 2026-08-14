@@ -13,7 +13,7 @@ import adminRoute from './src/routes/adminRoute.js';
 
 import adminParcuriRoute from './src/routes/adminParcuriRoute.js';
 import resolveParc from './src/middleware/resolveParc.js';
-import siteTestRoute from './src/routes/siteTestRoute.js';
+import siteRoute from './src/routes/siteRoute.js';
 import siteApiRoute from './src/routes/siteApiRoute.js';
 import siteSeoRoute from './src/routes/siteSeoRoute.js';
 
@@ -107,7 +107,7 @@ app.use(resolveParc);
 app.use(siteApiRoute);
 app.use(siteSeoRoute);
 
-app.use(siteTestRoute);   // TEMPORAR — se șterge la Batch 6
+app.use(siteRoute);   
 
 app.use(adminRoute);
 app.use(adminParcuriRoute);
