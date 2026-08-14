@@ -76,6 +76,21 @@ export const VARIANTS_CSS = `
 .car-noimg{width:100%;height:100%;
   background:linear-gradient(135deg,var(--surface),var(--border))}
 
+/* a — SINGURA variantă care suprapune prețul peste fotografie.
+   '.car-media' e deja 'position:relative', deci ancorarea e față de imagine,
+   nu față de card. */
+.car--a .car-media .car-price{position:absolute;left:.7rem;bottom:.7rem;z-index:1}
+.car--a .car-media .car-neg{position:absolute;right:.7rem;bottom:.7rem;z-index:1}
+
+/* Pentru b, c și d prețul stă în fluxul normal, în '.car-priceline', fără
+   fundal colorat — culoarea de accent o poartă textul. */
+.car--b .car-price,.car--c .car-price,.car--d .car-price{
+  background:none;padding:0;border-radius:0;
+}
+.car--b .car-neg,.car--c .car-neg,.car--d .car-neg{
+  background:none;padding:0;border-radius:0;
+}
+
 /* b — preț mare sub poză, specificații ca pastile */
 .car--b .car-media{aspect-ratio:16/11}
 .car--b .car-body{padding:1.05rem 1.1rem 1.15rem;gap:.7rem}

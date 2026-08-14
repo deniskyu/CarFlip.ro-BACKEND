@@ -190,14 +190,18 @@ h3{font-size:clamp(1.1rem,.98rem + .55vw,1.4rem)}
 .car-media img{width:100%;height:100%;object-fit:cover;
   transition:transform var(--t-slow) var(--ease)}
 .car:hover .car-media img{transform:scale(1.045)}
+/* Prețul e STATIC implicit. Suprapunerea peste fotografie e cazul SPECIAL,
+   activat doar de varianta 'a' (vezi stylesVariants.js).
+   Invers — absolut implicit, cu resetare în fiecare variantă — a produs deja
+   un bug: prețul rămânea absolut și ateriza peste butonul de WhatsApp la toate
+   presetările care nu-l suprapun. O regulă uitată nu mai poate face asta. */
 .car-price{
-  position:absolute;left:.7rem;bottom:.7rem;
   padding:.45rem .8rem;border-radius:calc(var(--radius) * .55);
   background:var(--accent);color:var(--on-accent);
   font-weight:800;font-size:1rem;letter-spacing:-.01em;
 }
-.car-neg{position:absolute;right:.7rem;bottom:.7rem;padding:.32rem .6rem;
-  border-radius:100px;background:rgba(0,0,0,.62);color:#fff;font-size:.7rem;font-weight:700}
+.car-neg{padding:.32rem .6rem;border-radius:100px;
+  background:rgba(0,0,0,.62);color:#fff;font-size:.7rem;font-weight:700}
 .car-body{padding:.95rem 1rem 1.05rem;display:flex;flex-direction:column;gap:.6rem;flex:1}
 .car-title{font-size:1.02rem;font-weight:700;line-height:1.3;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -215,13 +219,6 @@ h3{font-size:clamp(1.1rem,.98rem + .55vw,1.4rem)}
 }
 .car-wa:hover{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
 
-/* Variantă densă (presetările Compact și Industrial) */
-.car--dense .car-media{aspect-ratio:16/10}
-.car--dense .car-body{padding:.75rem .85rem .85rem;gap:.45rem}
-.car--dense .car-price{position:static;background:none;color:var(--accent);
-  padding:0;font-size:1.15rem}
-.car--dense .car-neg{position:static;background:none;color:var(--muted);padding:0;font-weight:600}
-.car--dense .car-priceline{display:flex;align-items:baseline;gap:.5rem}
 
 /* ── Servicii ────────────────────────────────────────────────────────────── */
 .svc-grid{display:grid;gap:clamp(.9rem,.7rem + .8vw,1.5rem);grid-template-columns:1fr}
