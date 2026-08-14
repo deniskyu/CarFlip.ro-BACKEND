@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { validateSubdomain } from "../utils/reservedSubdomains.js";
 import { normalizePhone } from "../utils/phone.js";
+import { ICON_NAMES, DEFAULT_ICON } from '../utils/serviceIcons.js';
 
 // ============================================================================
 //  src/models/parcModel.js   →   colecția 'parcuri'
@@ -39,6 +40,38 @@ const defaultSchedule = () => ([
     { day: 6, open: '09:00', close: '14:00', closed: false },
     { day: 0, open: '09:00', close: '14:00', closed: true  },
 ]);
+
+// ─── Servicii afișate pe pagina de acasă ────────────────────────────────────
+// Exact 3 sau deloc. Trei carduri se așază curat în orice layout: o linie pe
+// desktop, coloană pe mobil. Cu 2 rămâne un gol vizibil în grilă, cu 4 se rupe
+// pe două rânduri inegale.
+//
+// Limitele de caractere NU sunt arbitrare: la 360px lățime, un titlu peste 40
+// de caractere trece pe trei rânduri și dezaliniază cardurile între ele, iar
+// un text peste 180 face cardurile inegale ca înălțime — cel mai vizibil
+// defect de layout dintr-o secțiune cu trei coloane.
+const serviceSchema = new mongoose.Schema({
+    icon: {
+        type: String,
+        default: DEFAULT_ICON,
+        enum: {
+            values: ICON_NAMES,
+            message: 'Iconiță necunoscută.',
+        },
+    },
+    title: {
+        type: String,
+        required: [true, 'Titlul serviciului este obligatoriu.'],
+        trim: true,
+        maxlength: [40, 'Titlul serviciului poate avea maxim 40 de caractere.'],
+    },
+    text: {
+        type: String,
+        required: [true, 'Descrierea serviciului este obligatorie.'],
+        trim: true,
+        maxlength: [180, 'Descrierea serviciului poate avea maxim 180 de caractere.'],
+    },
+}, { _id: false });
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const TIME_HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -130,6 +163,19 @@ const parcSchema = new mongoose.Schema({
     about_title:   trimTo(60),
     about_text:    trimTo(1200),
     contact_intro: trimTo(300),
+
+       // ─── Servicii ───────────────────────────────────────────────────────────
+    // Gol → secțiunea nu se randează deloc pe site. Nu se afișează niciodată
+    // un titlu de secțiune cu spațiu gol dedesubt.
+    services_title: { type: String, trim: true, maxlength: 60, default: 'Ce oferim' },
+    services: {
+        type: [serviceSchema],
+        default: [],
+        validate: {
+            validator: (arr) => Array.isArray(arr) && (arr.length === 0 || arr.length === 3),
+            message: 'Secțiunea de servicii trebuie să aibă exact 3 intrări, sau niciuna.',
+        },
+    },
 
     // ─── Contact ────────────────────────────────────────────────────────────
     phone: {

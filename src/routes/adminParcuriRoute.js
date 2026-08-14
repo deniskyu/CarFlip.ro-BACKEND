@@ -13,6 +13,7 @@ import SeenPost from '../models/seenPostsModel.js';
 import { authAdmin, adminFetchLimiter, adminActionLimiter } from './adminRoute.js';
 import { validateSubdomain } from '../utils/reservedSubdomains.js';
 import { normalizePhone } from '../utils/phone.js';
+import { isValidIcon, DEFAULT_ICON } from '../utils/serviceIcons.js';
 import { uploadParcImage, deleteParcImage } from '../utils/parcUpload.js';
 import { invalidateParcCache, warmParcCache } from '../services/parcCache.js';
 import { getStockStats, computeIndexable, refreshIndexable } from '../services/indexableCheck.js';
@@ -88,6 +89,34 @@ const arr = (v, max) => {
     return out.map(x => String(x).trim()).filter(Boolean).slice(0, max);
 };
 
+/**
+ * Serviciile vin ca JSON string din multipart.
+ * Filtrăm intrările incomplete în loc să respingem tot: dacă cineva lasă un
+ * card gol în formular, celelalte două ar trebui să se salveze, nu să pice
+ * întregul request cu o eroare de validare confuză.
+ *
+ * Întoarce undefined dacă nu s-a trimis nimic util → câmpul nu se atinge.
+ */
+const parseServices = (v) => {
+    let out = v;
+    if (typeof v === 'string') { try { out = JSON.parse(v); } catch { return undefined; } }
+    if (!Array.isArray(out)) return undefined;
+
+    const clean = out
+        .filter(s => s && str(s.title) && str(s.text))
+        .slice(0, 3)
+        .map(s => ({
+            icon: isValidIcon(s.icon) ? s.icon : DEFAULT_ICON,
+            title: str(s.title).slice(0, 40),
+            text: str(s.text).slice(0, 180),
+        }));
+
+    // 0 sau 3, niciodată 1 sau 2 — vezi comentariul din parcModel.
+    if (clean.length === 0) return [];
+    if (clean.length < 3) return undefined;
+    return clean;
+};
+
 /** Programul vine ca JSON string; îl validăm minimal ca să nu intre gunoi. */
 const parseSchedule = (v) => {
     let out = v;
@@ -139,7 +168,8 @@ const parseParcBody = (body, { partial = false } = {}) => {
 
     if ('seo_keywords' in b) out.seo_keywords = arr(b.seo_keywords, 8);
     if ('seo_service_area' in b) out.seo_service_area = arr(b.seo_service_area, 10);
-
+    if ('services_title' in b) out.services_title = str(b.services_title);
+    if ('services' in b) set('services', parseServices(b.services));
     if ('schedule' in b) set('schedule', parseSchedule(b.schedule));
 
     return out;
