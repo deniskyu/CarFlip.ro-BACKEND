@@ -30,7 +30,7 @@ const redisCache = new Redis(process.env.REDIS_URL, {
     maxRetriesPerRequest: 2,
     connectTimeout: 3000,
     enableReadyCheck: true,
-    enableOfflineQueue: false, // fără coadă când conexiunea e jos → eroare imediată
+    enableOfflineQueue: true, // fără coadă când conexiunea e jos → eroare imediată
     retryStrategy: (times) => Math.min(times * 200, 5000),
 });
 
