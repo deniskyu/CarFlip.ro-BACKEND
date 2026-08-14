@@ -9,7 +9,6 @@ import {
 import { getLegalDoc } from '../legal/texts.js';
 import { autoDealerLd, vehicleLd, breadcrumbLd, itemListLd, faqLd } from '../../services/seo/jsonld.js';
 import { formatPhoneDisplay } from '../../utils/phone.js';
-
 // ============================================================================
 //  src/site/pages/inner.js
 // ----------------------------------------------------------------------------
