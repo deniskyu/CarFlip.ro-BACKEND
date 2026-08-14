@@ -10,6 +10,9 @@ import { initSocket } from './src/socket/socketManager.js';
 import helmet from 'helmet';
 import adminRoute from './src/routes/adminRoute.js';
 
+import resolveParc from './src/middleware/resolveParc.js';
+import siteTestRoute from './src/routes/siteTestRoute.js';
+
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -23,15 +26,49 @@ const httpServer = createServer(app)
 httpServer.keepAliveTimeout = 65000;
 httpServer.headersTimeout = 66000;
 
+// Domeniul public R2. Citit din env ca să nu existe două surse de adevăr.
+const MEDIA_ORIGIN = process.env.R2_PUBLIC_DOMAIN || 'https://media.car-flip.com';
+
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {
             defaultSrc: ["'self'"],
+
+            // 'unsafe-inline' rămâne: paginile existente (/post/:id, /profile/:id)
+            // au script și style inline. Nu se scoate în acest batch.
             scriptSrc: ["'self'", "'unsafe-inline'"],
             styleSrc: ["'self'", "'unsafe-inline'"],
+
+            // Pozele mașinilor, logo-urile și bannerele vin din R2.
+            // data: e necesar pentru placeholderele inline și SVG-urile mici.
+            imgSrc: ["'self'", 'data:', 'blob:', MEDIA_ORIGIN],
+
+            // Videoclipurile din anunțuri, tot din R2.
+            mediaSrc: ["'self'", MEDIA_ORIGIN],
+
+            fontSrc: ["'self'", 'data:'],
+            connectSrc: ["'self'", MEDIA_ORIGIN],
+
+            // Harta din pagina de contact (Batch 6).
+            frameSrc: ["'self'", 'https://www.google.com', 'https://maps.google.com'],
+
+            objectSrc: ["'none'"],
+            baseUri: ["'self'"],
+            formAction: ["'self'"],
+
+            // Nimeni nu are voie să pună site-urile într-un iframe:
+            // apărare contra clickjacking pe panoul dealerului.
+            frameAncestors: ["'none'"],
+
+            upgradeInsecureRequests: [],
         }
-    }
+    },
+    // R2 servește imaginile de pe alt origin. Politica implicită same-origin
+    // a lui helmet ar bloca încărcarea lor cross-origin în unele browsere.
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
+
+
 app.set('trust proxy', 2);
 
 
@@ -58,6 +95,10 @@ app.use((req, res, next) => {
     if (req.path.startsWith('/api/admin')) return next();
     cors()(req, res, next);
 });
+
+app.use(resolveParc);
+app.use(siteTestRoute);
+
 app.use(adminRoute);
 
 app.use(indexRoute);
