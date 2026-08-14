@@ -24,7 +24,9 @@ export const RESERVED_SUBDOMAINS = new Set([
     'dkim', 'spf', 'dmarc', '_domainkey',
 
     // Medii de lucru
-    'dev', 'test', 'testing', 'staging', 'stage', 'demo', 'preview', 'beta',
+    // NOTĂ: `demo` NU e rezervat intenționat — e planificat ca site-ul permanent
+    // de prezentare pentru vânzări (demo.car-flip.com), deci trebuie creabil.
+    'dev', 'test', 'testing', 'staging', 'stage', 'preview', 'beta',
     'alpha', 'sandbox', 'local', 'localhost', 'tmp', 'temp',
 
     // Panouri și acces
