@@ -61,7 +61,7 @@ app.use(helmet({
 
             // Nimeni nu are voie să pună site-urile într-un iframe:
             // apărare contra clickjacking pe panoul dealerului.
-            frameAncestors: ["'none'"],
+            frameAncestors: ["'self'"],
 
             upgradeInsecureRequests: [],
         }

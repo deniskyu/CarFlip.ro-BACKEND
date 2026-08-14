@@ -1,7 +1,7 @@
 import { html } from '../html.js';
 import { Layout } from '../layout.js';
 import { getPreset } from '../presets.js';
-import { Header, Hero, CarCard, Services, CtaBand, Footer, StickyWhatsapp, ICONS } from '../components.js';
+import { Header, Hero, CarCard, cardVariant, Services, CtaBand, Footer, StickyWhatsapp, ICONS } from '../components.js';
 import { autoDealerLd, breadcrumbLd, itemListLd } from '../../services/seo/jsonld.js';
 
 // ============================================================================
@@ -24,17 +24,18 @@ import { autoDealerLd, breadcrumbLd, itemListLd } from '../../services/seo/jsonl
 
 export const renderHome = (parc, data) => {
     const preset = getPreset(parc.preset);
-    const dense = preset.variants.card === 'c';
+    // Litera de variantă pentru card vine din presetare (a/b/c/d).
+    const cv = cardVariant(preset);
     const origin = `https://${parc.subdomain}.car-flip.com`;
 
     const cars = Array.isArray(data.latest) ? data.latest : [];
     const brands = Array.isArray(data.top_brands) ? data.top_brands : [];
 
     const body = html`
-${Header(parc, { current: 'home' })}
+${Header(parc, { current: 'home', preset })}
 
 <main>
-  ${Hero(parc, { total: data.total, preset })}
+  ${Hero(parc, { total: data.total, preset, filters: data.filters })}
 
   <!-- ── Ultimele mașini ────────────────────────────────────────────── -->
   <section class="section">
@@ -51,7 +52,7 @@ ${Header(parc, { current: 'home' })}
 
       ${cars.length ? html`
       <div class="car-grid">
-        ${cars.map((c, i) => CarCard(c, { dense, eager: i < 2 }))}
+        ${cars.map((c, i) => CarCard(c, { variant: cv, eager: i < 2 }))}
       </div>` : html`
       <div class="empty-state">
         <p>Stocul se actualizează. Revino în curând sau scrie-ne pe WhatsApp — s-ar putea să avem exact ce cauți.</p>
@@ -87,7 +88,7 @@ ${Header(parc, { current: 'home' })}
   ${CtaBand(parc, { whatsappUrl: data.whatsapp_url })}
 </main>
 
-${Footer(parc)}
+${Footer(parc, { preset })}
 ${StickyWhatsapp(parc, { whatsappUrl: data.whatsapp_url, preset })}`;
 
     return Layout({

@@ -4,6 +4,8 @@ import { siteLimiter } from '../utils/rateLimiters.js';
 import { isValidSlug } from '../utils/slug.js';
 import { SITE_CSS, CSS_VERSION } from '../site/styles.js';
 import { PAGES_CSS } from '../site/stylesPages.js';
+import { VARIANTS_CSS } from '../site/stylesVariants.js';
+import { renderPresetari } from '../site/pages/presetari.js';
 import { renderHome } from '../site/pages/home.js';
 import {
     renderStoc, renderMasina, renderMarca, renderContact, renderLegal, renderNotFound,
@@ -95,9 +97,11 @@ const cacheHeader = (parc, indexablePage = true) =>
         ? 'public, max-age=60, s-maxage=300, stale-while-revalidate=600'
         : 'private, no-store';
 
-const send = (res, parc, html, indexablePage = true) =>
+// Primește `req` ca să poată dezactiva cache-ul când e activ un override de
+// presetare — altfel Cloudflare ar servi varianta forțată tuturor vizitatorilor.
+const send = (req, res, parc, html, indexablePage = true) =>
     res.status(200).type('text/html; charset=utf-8')
-        .set('Cache-Control', cacheHeader(parc, indexablePage))
+        .set('Cache-Control', req?.presetOverride ? 'private, no-store' : cacheHeader(parc, indexablePage))
         .set('Vary', 'Accept-Encoding')
         .send(html);
 
@@ -109,7 +113,44 @@ const send = (res, parc, html, indexablePage = true) =>
 siteRoute.get(`/assets/site.${CSS_VERSION}.css`, (req, res) => {
     res.status(200).type('text/css')
         .set('Cache-Control', 'public, max-age=31536000, immutable')
-        .send(SITE_CSS + PAGES_CSS);
+        .send(SITE_CSS + PAGES_CSS + VARIANTS_CSS);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  OVERRIDE TEMPORAR DE PRESETARE  —  ?__preset=0..5
+// ────────────────────────────────────────────────────────────────────────────
+//  Randează orice pagină cu altă presetare, fără să schimbe nimic în baza de
+//  date. Două întrebuințări: compararea celor 6 variante și arătarea de
+//  alternative unui client, live pe site-ul lui.
+//
+//  Paginile cu override primesc `noindex`: altfel Google ar vedea șase versiuni
+//  ale aceleiași pagini și le-ar considera conținut duplicat.
+// ════════════════════════════════════════════════════════════════════════════
+siteRoute.use((req, res, next) => {
+    if (!req.isSite || !req.parc) return next();
+    const p = req.query.__preset;
+    if (p === undefined) return next();
+
+    const n = Number(p);
+    if (!Number.isInteger(n) || n < 0 || n > 5) return next();
+
+    // Copie, NU mutație pe obiectul din cache — altfel presetarea forțată s-ar
+    // scurge către toți ceilalți vizitatori până la expirarea cheii Redis.
+    req.parc = { ...req.parc, preset: n };
+    req.presetOverride = true;
+    res.set('X-Robots-Tag', 'noindex, nofollow');
+    next();
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+//  COMPARAȚIA PRESETĂRILOR  —  /_presetari
+// ════════════════════════════════════════════════════════════════════════════
+siteRoute.get('/_presetari', siteLimiter, (req, res, next) => {
+    if (!req.isSite || !req.parc) return next();
+    return res.status(200).type('text/html; charset=utf-8')
+        .set('X-Robots-Tag', 'noindex, nofollow')
+        .set('Cache-Control', 'private, no-store')
+        .send(renderPresetari(req.parc));
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -123,7 +164,7 @@ siteRoute.get('/', siteLimiter, async (req, res, next) => {
             getStockFilters(parc.user_id),
             sales.find({ user_id: parc.user_id, is_active: true }).sort({ _id: -1 }).limit(6).lean(),
         ]);
-        return send(res, parc, renderHome(parc, {
+        return send(req, res, parc, renderHome(parc, {
             meta: buildMeta('home', parc, stockMetaData(filters)),
             total: filters.total,
             about_text: generateAboutText(parc, filters),
@@ -194,7 +235,7 @@ siteRoute.get('/stoc', siteLimiter, async (req, res, next) => {
             sales.find(query).sort(SORTS[sort]).skip((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).lean(),
         ]);
 
-        return send(res, parc, renderStoc(parc, {
+        return send(req, res, parc, renderStoc(parc, {
             meta: buildMeta('stoc', parc, stockMetaData(filters)),
             cars: cars.map((s) => mapCar(s, parc)),
             total, page, pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
@@ -238,7 +279,7 @@ siteRoute.get('/masina/:slug', siteLimiter, async (req, res, next) => {
         const filters = await getStockFilters(parc.user_id);
         const bp = brandsWithPages(filters).find((b) => b.id === sale.brand?.id);
 
-        return send(res, parc, renderMasina(parc, {
+        return send(req, res, parc, renderMasina(parc, {
             meta, car: mapCar(sale, parc, true), raw: sale,
             similar: similar.map((s) => mapCar(s, parc)),
             brandPage: bp ? bp.slug : null,
@@ -290,7 +331,7 @@ const brandHandler = async (req, res, next) => {
             ? buildMeta('model', parc, { brand: brand.name, model: model.name, count, ...brandMetaData(brand) })
             : buildMeta('brand', parc, brandMetaData(brand));
 
-        return send(res, parc, renderMarca(parc, {
+        return send(req, res, parc, renderMarca(parc, {
             meta,
             brand: { slug: brand.slug, name: brand.name, count: brand.count },
             model: model ? { slug: model.slug, name: model.name, count: model.count } : null,
@@ -318,7 +359,7 @@ siteRoute.get('/contact', siteLimiter, async (req, res, next) => {
     const parc = req.parc;
     try {
         const filters = await getStockFilters(parc.user_id);
-        return send(res, parc, renderContact(parc, {
+        return send(req, res, parc, renderContact(parc, {
             meta: buildMeta('contact', parc, {}),
             about_text: generateAboutText(parc, filters),
             whatsapp_url: buildWhatsappLink(parc, null),

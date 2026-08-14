@@ -3,17 +3,20 @@ import { SERVICE_ICONS, DEFAULT_ICON } from '../utils/serviceIcons.js';
 import { formatPhoneDisplay } from '../utils/phone.js';
 
 // ============================================================================
-//  src/site/components.js
+//  src/site/components.js   — versiunea cu VARIANTE (înlocuiește cea din 6a)
 // ----------------------------------------------------------------------------
-//  Componentele comune. Fiecare e o funcție pură: primește date, întoarce
-//  markup. Fără efecte secundare, fără acces la baza de date, fără `req`.
+//  Fiecare componentă acceptă acum litera de variantă din presetare. Diferența
+//  față de 6a: acolo `variants.header` și `variants.footer` erau declarate dar
+//  ignorate, deci toate presetările aveau același antet și același subsol.
 //
-//  Asta le face testabile în izolare — le pot randa cu date fabricate și
-//  inspecta ieșirea, ceea ce cu template literals împrăștiate prin rute nu s-ar
-//  putea.
+//  ── CUM E STRUCTURATĂ VARIAȚIA ────────────────────────────────────────────
+//  Markup identic acolo unde se poate, clasă modificatoare pentru restul.
+//  Se ramifică doar unde STRUCTURA chiar diferă — de exemplu antetul `c`, care
+//  are o bandă suplimentară deasupra.
 //
-//  Variantele (`a`, `b`, `c`, `d`) vin din presetare. Nu se combină liber:
-//  vezi comentariul din presets.js.
+//  Motivul e practic: cu cât markup-ul e mai comun, cu atât o corectură se
+//  aplică simultan la toate cele 6 presetări. Dacă fiecare ar avea propriul
+//  arbore HTML, un bug de accesibilitate ar trebui reparat de șase ori.
 // ============================================================================
 
 const PLAY_STORE = 'https://play.google.com/store/apps/details?id=com.mobilefrontendframe';
@@ -22,9 +25,6 @@ const APP_STORE = 'https://apps.apple.com/ro/app/id6760683057';
 const DAY_NAMES = ['Duminică', 'Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri', 'Sâmbătă'];
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
-// ─── Iconițe inline ─────────────────────────────────────────────────────────
-// `stroke="currentColor"` → preiau automat culoarea contextului, deci aceeași
-// iconiță arată corect și pe fundal deschis, și pe accent, fără variante.
 const icon = (body, size = 20) => raw(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" ` +
     `fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ` +
@@ -48,38 +48,63 @@ export const ICONS = {
 const svcIcon = (name, size = 22) =>
     icon((SERVICE_ICONS[name] || SERVICE_ICONS[DEFAULT_ICON]).body, size);
 
-// ════════════════════════════════════════════════════════════════════════════
-//  HEADER
-// ════════════════════════════════════════════════════════════════════════════
-
 const NAV = [
     { href: '/', label: 'Acasă', key: 'home' },
     { href: '/stoc', label: 'Stoc mașini', key: 'stoc' },
     { href: '/contact', label: 'Contact', key: 'contact' },
 ];
 
+const Brand = (parc, size = 42) => html`
+<a class="brand" href="/">
+  <img class="brand-logo" src="${parc.logo_url}" alt=""
+       width="${size}" height="${size}" fetchpriority="high">
+  <span class="brand-name">${parc.display_name}
+    <span class="brand-city">${parc.city}${parc.county ? `, ${parc.county}` : ''}</span>
+  </span>
+</a>`;
+
+const NavLinks = (current) =>
+    NAV.map((n) => html`<a href="${n.href}"${current === n.key ? raw(' aria-current="page"') : ''}>${n.label}</a>`);
+
+// ════════════════════════════════════════════════════════════════════════════
+//  HEADER — 3 variante
+// ════════════════════════════════════════════════════════════════════════════
+
 /**
- * Header. Telefonul e VIZIBIL pe orice lățime, ca buton de apelare.
- * Dealerii vând prin telefon; pe mobil e cel mai eficient element de conversie
- * din tot site-ul, deci nu are voie să se ascundă în meniul hamburger.
+ * Telefonul rămâne VIZIBIL în toate variantele, pe orice lățime. Nu intră
+ * niciodată în meniul hamburger: dealerii vând prin telefon, iar pe mobil
+ * butonul de apelare e cel mai eficient element de conversie din tot site-ul.
+ *
+ *   a — logo stânga · meniu centru · telefon dreapta        (Clar, Editorial)
+ *   b — logo stânga · meniu dreapta · antet mai înalt        (Nocturn, Cald)
+ *   c — bandă subțire deasupra cu adresă și program, apoi rândul principal
+ *       (Compact, Industrial) — mai multă informație în același spațiu
  */
-export const Header = (parc, { current } = {}) => {
+export const Header = (parc, { current, preset } = {}) => {
+    const v = preset?.variants?.header || 'a';
     const tel = `tel:+${parc.phone}`;
+    const openDays = (parc.schedule || []).filter((d) => !d.closed);
+    const shortHours = openDays.length
+        ? `${openDays[0].open} – ${openDays[0].close}`
+        : null;
+
     return html`
-<header class="site-header">
+<header class="site-header hdr--${v}">
+  ${v === 'c' ? html`
+  <div class="hdr-strip">
+    <div class="wrap hdr-strip-in">
+      <span>${ICONS.pin(13)} ${parc.address}, ${parc.city}</span>
+      ${shortHours ? html`<span>${ICONS.clock(13)} Luni–Vineri ${shortHours}</span>` : ''}
+      <a href="${tel}">${ICONS.phone(13)} ${formatPhoneDisplay(parc.phone)}</a>
+    </div>
+  </div>` : ''}
+
   <div class="wrap">
     <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true">
     <div class="header-inner">
-      <a class="brand" href="/">
-        <img class="brand-logo" src="${parc.logo_url}" alt="" width="42" height="42" fetchpriority="high">
-        <span class="brand-name">${parc.display_name}
-          <span class="brand-city">${parc.city}${parc.county ? `, ${parc.county}` : ''}</span>
-        </span>
-      </a>
+      ${Brand(parc, v === 'b' ? 46 : 42)}
 
-      <nav class="nav" aria-label="Meniu principal">
-        ${NAV.map((n) => html`<a href="${n.href}"${current === n.key ? raw(' aria-current="page"') : ''}>${n.label}</a>`)}
-      </nav>
+      <nav class="nav" aria-label="Meniu principal">${NavLinks(current)}</nav>
 
       <div class="header-cta">
         <a class="header-phone" href="${tel}">
@@ -89,38 +114,57 @@ export const Header = (parc, { current } = {}) => {
       </div>
     </div>
 
-    <nav class="nav-mobile" aria-label="Meniu mobil">
-      ${NAV.map((n) => html`<a href="${n.href}">${n.label}</a>`)}
-    </nav>
+    <nav class="nav-mobile" aria-label="Meniu mobil">${NavLinks(current)}</nav>
   </div>
 </header>`;
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-//  HERO
+//  HERO — 4 variante
 // ════════════════════════════════════════════════════════════════════════════
 
-export const Hero = (parc, { total, preset }) => {
-    const centered = preset.variants.hero === 'b' || preset.variants.hero === 'd';
+/**
+ *   a — text aliniat stânga, ancorat jos                     (Clar, Industrial)
+ *   b — centrat, înalt, tipografie mare                       (Nocturn)
+ *   c — bandă scurtă, cu un rând de cifre sub titlu           (Compact)
+ *   d — centrat editorial, linie subțire deasupra             (Editorial)
+ *
+ * Gradientul întunecat e AUTOMAT și neconfigurabil, în toate variantele.
+ * Rezolvă definitiv „text alb pe cer alb", indiferent ce banner urcă dealerul.
+ */
+export const Hero = (parc, { total, preset, filters }) => {
+    const v = preset?.variants?.hero || 'a';
     const title = parc.hero_title || `Mașini verificate în ${parc.city}`;
     const sub = parc.hero_subtitle || '';
 
+    const stats = v === 'c' && filters ? [
+        [total, total === 1 ? 'mașină în stoc' : 'mașini în stoc'],
+        [filters.brands?.length || 0, 'mărci disponibile'],
+        [filters.price?.min ? `${Math.round(filters.price.min / 1000)}k €` : '—', 'preț de la'],
+    ] : null;
+
     return html`
-<section class="hero ${centered ? 'hero--center' : ''}">
+<section class="hero hero--${v}">
   <div class="hero-media">
-    <img src="${parc.banner_url}" alt=""
-         width="1920" height="640"
+    <img src="${parc.banner_url}" alt="" width="1920" height="640"
          fetchpriority="high" decoding="async">
   </div>
   <div class="hero-scrim"></div>
   <div class="wrap">
     <div class="hero-inner">
+      ${v === 'd' ? html`<span class="hero-rule"></span>` : ''}
+      ${v === 'd' ? html`<p class="hero-eyebrow">${parc.city}, ${parc.county}</p>` : ''}
       <h1>${title}</h1>
       ${sub ? html`<p class="hero-sub">${sub}</p>` : ''}
-      ${total > 0 ? html`
+
+      ${stats ? html`
+      <div class="hero-stats">
+        ${stats.map(([n, label]) => html`<div><b>${n}</b><span>${label}</span></div>`)}
+      </div>` : total > 0 ? html`
       <div class="hero-count">
         <b>${total}</b> ${total === 1 ? 'autovehicul disponibil' : 'autovehicule disponibile'}
       </div>` : ''}
+
       <div class="hero-actions">
         <a class="btn btn--on-dark" href="/stoc">Vezi mașinile noastre ${ICONS.arrow(17)}</a>
         <a class="btn btn--outline-light" href="/contact">${ICONS.pin(17)} Unde ne găsești</a>
@@ -131,25 +175,28 @@ export const Hero = (parc, { total, preset }) => {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-//  CARD DE MAȘINĂ
+//  CARD DE MAȘINĂ — 4 variante
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
+ *   a — preț suprapus pe poză, jos-stânga                     (Clar, Cald)
+ *   b — preț mare sub poză, specificații ca pastile           (Nocturn)
+ *   c — dens, preț pe același rând cu titlul                  (Compact, Industrial)
+ *   d — cadru subțire, titlu serif, preț aliniat la dreapta   (Editorial)
+ *
  * `width` și `height` pe <img> vin din baza de date (le scrie mediaWorker).
  * Împreună cu `aspect-ratio` din CSS, rezervă spațiul înainte ca poza să se
  * încarce → CLS zero, pe care Google îl măsoară direct.
- *
- * `loading="lazy"` peste primele două imagini: primele sunt deasupra pliului
- * și trebuie să pornească imediat.
  */
-export const CarCard = (car, { dense = false, eager = false } = {}) => {
+export const CarCard = (car, { variant = 'a', eager = false } = {}) => {
     const specs = [
-        car.year,
-        car.mileage_fmt,
-        car.fuel,
+        car.year, car.mileage_fmt, car.fuel,
         car.horsepower ? `${car.horsepower} CP` : null,
         car.transmission,
     ].filter(Boolean);
+
+    const overlayPrice = variant === 'a';
+    const chipSpecs = variant === 'b';
 
     const media = car.cover
         ? html`<img src="${car.cover.url}" alt="${car.cover.alt}"
@@ -157,34 +204,39 @@ export const CarCard = (car, { dense = false, eager = false } = {}) => {
                  ${car.cover.height ? raw(`height="${car.cover.height}"`) : ''}
                  loading="${eager ? 'eager' : 'lazy'}"
                  ${eager ? raw('fetchpriority="high"') : raw('decoding="async"')}>`
-        : html`<div style="width:100%;height:100%"></div>`;
+        : html`<div class="car-noimg" aria-hidden="true"></div>`;
 
     return html`
-<article class="car ${dense ? 'car--dense' : ''} reveal">
+<article class="car car--${variant} reveal">
   <a class="car-media" href="${car.url}" aria-label="${car.name} ${car.year}">
     ${media}
-    ${dense ? '' : html`<span class="car-price">${car.price_fmt}</span>`}
-    ${!dense && car.negotiable ? html`<span class="car-neg">negociabil</span>` : ''}
+    ${overlayPrice ? html`<span class="car-price">${car.price_fmt}</span>` : ''}
+    ${overlayPrice && car.negotiable ? html`<span class="car-neg">negociabil</span>` : ''}
   </a>
   <div class="car-body">
-    ${dense ? html`
+    ${!overlayPrice ? html`
     <div class="car-priceline">
       <span class="car-price">${car.price_fmt}</span>
       ${car.negotiable ? html`<span class="car-neg">negociabil</span>` : ''}
     </div>` : ''}
     <h3 class="car-title"><a href="${car.url}">${car.title || car.name}</a></h3>
-    <ul class="car-specs">${specs.map((s) => html`<li>${s}</li>`)}</ul>
+    <ul class="car-specs ${chipSpecs ? 'car-specs--chips' : ''}">
+      ${specs.map((s) => html`<li>${s}</li>`)}
+    </ul>
     <div class="car-foot">
       <a class="car-wa" href="${car.whatsapp_url}" target="_blank" rel="noopener nofollow">
-        ${ICONS.whatsapp(17)} Întreabă pe WhatsApp
+        ${ICONS.whatsapp(17)} <span>Întreabă pe WhatsApp</span>
       </a>
     </div>
   </div>
 </article>`;
 };
 
+/** Litera de variantă pentru card, dedusă din presetare. */
+export const cardVariant = (preset) => preset?.variants?.card || 'a';
+
 // ════════════════════════════════════════════════════════════════════════════
-//  SERVICII
+//  SERVICII — 4 variante
 // ════════════════════════════════════════════════════════════════════════════
 
 export const Services = (parc, { preset }) => {
@@ -193,7 +245,7 @@ export const Services = (parc, { preset }) => {
     // spațiu alb dedesubt.
     if (list.length === 0) return '';
 
-    const v = preset.variants.services;
+    const v = preset?.variants?.services || 'a';
     const cls = v === 'b' || v === 'c' ? 'svc svc--row' : v === 'd' ? 'svc svc--num' : 'svc';
 
     return html`
@@ -241,10 +293,16 @@ export const CtaBand = (parc, { whatsappUrl }) => html`
 </section>`;
 
 // ════════════════════════════════════════════════════════════════════════════
-//  FOOTER
+//  FOOTER — 3 variante
 // ════════════════════════════════════════════════════════════════════════════
 
-export const Footer = (parc) => {
+/**
+ *   a — trei coloane                        (Clar, Compact, Industrial)
+ *   b — două coloane, partea legală centrată (Nocturn)
+ *   c — bloc de brand centrat sus, apoi coloane (Editorial, Cald)
+ */
+export const Footer = (parc, { preset } = {}) => {
+    const v = preset?.variants?.footer || 'a';
     const schedule = Array.isArray(parc.schedule) ? parc.schedule : [];
     const byDay = new Map(schedule.map((d) => [Number(d.day), d]));
 
@@ -256,61 +314,62 @@ export const Footer = (parc) => {
 
     const year = new Date().getFullYear();
 
+    const brandBlock = html`
+<div class="footer-brand">
+  <img src="${parc.logo_url}" alt="" width="44" height="44" loading="lazy">
+  <strong>${parc.display_name}</strong>
+</div>
+<p class="footer-addr">${ICONS.pin(15)} ${parc.address}, ${parc.city}, ${parc.county}</p>
+${socials.length ? html`
+<div class="footer-social">
+  ${socials.map((s) => html`
+  <a href="${s.url}" target="_blank" rel="noopener nofollow" aria-label="${s.label}">${s.icon}</a>`)}
+</div>` : ''}
+<div class="store-badges">
+  <a class="store-badge" href="${APP_STORE}" target="_blank" rel="noopener">
+    ${ICONS.apple(20)}<span>Descarcă din<b>App Store</b></span>
+  </a>
+  <a class="store-badge" href="${PLAY_STORE}" target="_blank" rel="noopener">
+    ${ICONS.play(20)}<span>Disponibilă pe<b>Google Play</b></span>
+  </a>
+</div>`;
+
+    const linksBlock = html`
+<h4>Secțiuni</h4>
+<ul class="footer-list">${NAV.map((n) => html`<li><a href="${n.href}">${n.label}</a></li>`)}</ul>
+<h4 style="margin-top:1.6rem">Contact</h4>
+<ul class="footer-list">
+  <li><a href="tel:+${parc.phone}">${formatPhoneDisplay(parc.phone)}</a></li>
+  ${parc.email ? html`<li><a href="mailto:${parc.email}">${parc.email}</a></li>` : ''}
+</ul>`;
+
+    const hoursBlock = html`
+<h4>${ICONS.clock(14)} Program</h4>
+${DAY_ORDER.map((d) => {
+    const day = byDay.get(d);
+    const closed = !day || day.closed;
     return html`
-<footer class="site-footer">
+<div class="footer-hours ${closed ? 'is-closed' : ''}">
+  <span>${DAY_NAMES[d]}</span>
+  <span>${closed ? 'Închis' : `${day.open} – ${day.close}`}</span>
+</div>`;
+})}`;
+
+    return html`
+<footer class="site-footer ftr--${v}">
   <div class="wrap">
+    ${v === 'c' ? html`
+    <div class="footer-hero">${brandBlock}</div>
     <div class="footer-grid">
-
-      <div>
-        <div class="footer-brand">
-          <img src="${parc.logo_url}" alt="" width="44" height="44" loading="lazy">
-          <strong>${parc.display_name}</strong>
-        </div>
-        <p style="font-size:.9rem;opacity:.8;line-height:1.7">
-          ${ICONS.pin(15)} ${parc.address}, ${parc.city}, ${parc.county}
-        </p>
-        ${socials.length ? html`
-        <div class="footer-social">
-          ${socials.map((s) => html`
-          <a href="${s.url}" target="_blank" rel="noopener nofollow" aria-label="${s.label}">${s.icon}</a>`)}
-        </div>` : ''}
-
-        <div class="store-badges">
-          <a class="store-badge" href="${APP_STORE}" target="_blank" rel="noopener">
-            ${ICONS.apple(20)}<span>Descarcă din<b>App Store</b></span>
-          </a>
-          <a class="store-badge" href="${PLAY_STORE}" target="_blank" rel="noopener">
-            ${ICONS.play(20)}<span>Disponibilă pe<b>Google Play</b></span>
-          </a>
-        </div>
-      </div>
-
-      <div>
-        <h4>Secțiuni</h4>
-        <ul class="footer-list">
-          ${NAV.map((n) => html`<li><a href="${n.href}">${n.label}</a></li>`)}
-        </ul>
-        <h4 style="margin-top:1.6rem">Contact</h4>
-        <ul class="footer-list">
-          <li><a href="tel:+${parc.phone}">${formatPhoneDisplay(parc.phone)}</a></li>
-          ${parc.email ? html`<li><a href="mailto:${parc.email}">${parc.email}</a></li>` : ''}
-        </ul>
-      </div>
-
-      <div>
-        <h4>${ICONS.clock(14)} Program</h4>
-        ${DAY_ORDER.map((d) => {
-            const day = byDay.get(d);
-            const closed = !day || day.closed;
-            return html`
-        <div class="footer-hours ${closed ? 'is-closed' : ''}">
-          <span>${DAY_NAMES[d]}</span>
-          <span>${closed ? 'Închis' : `${day.open} – ${day.close}`}</span>
-        </div>`;
-        })}
-      </div>
-
+      <div>${linksBlock}</div>
+      <div>${hoursBlock}</div>
+    </div>` : html`
+    <div class="footer-grid">
+      <div>${brandBlock}</div>
+      <div>${linksBlock}</div>
+      ${v === 'b' ? '' : html`<div>${hoursBlock}</div>`}
     </div>
+    ${v === 'b' ? html`<div class="footer-hours-row">${hoursBlock}</div>` : ''}`}
 
     <div class="footer-legal">
       <p class="footer-firm">
@@ -336,12 +395,12 @@ export const Footer = (parc) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * Poziția e FIXĂ dreapta-jos, pe toate presetările. Nu e limitare tehnică:
- * acolo ajunge degetul mare pe telefon, e convenția pe care o recunoaște
- * toată lumea și nu acoperă conținut. Variază doar forma.
+ * Poziția e FIXĂ dreapta-jos în toate presetările. Nu e limitare tehnică:
+ * acolo ajunge degetul mare pe telefon, e convenția pe care o recunoaște toată
+ * lumea și nu acoperă conținut. Variază doar forma.
  */
 export const StickyWhatsapp = (parc, { whatsappUrl, preset }) => {
-    const v = preset.variants.sticky;
+    const v = preset?.variants?.sticky || 'pill';
     const mod = v === 'circle' ? 'sticky-wa--circle' : v === 'bar' ? 'sticky-wa--bar' : '';
     return html`
 <a class="sticky-wa ${mod}" href="${whatsappUrl}" target="_blank" rel="noopener nofollow"
@@ -350,4 +409,6 @@ export const StickyWhatsapp = (parc, { whatsappUrl, preset }) => {
 </a>`;
 };
 
-export default { Header, Hero, CarCard, Services, CtaBand, Footer, StickyWhatsapp, ICONS };
+export default {
+    Header, Hero, CarCard, cardVariant, Services, CtaBand, Footer, StickyWhatsapp, ICONS,
+};

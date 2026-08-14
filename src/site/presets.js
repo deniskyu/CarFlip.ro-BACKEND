@@ -3,9 +3,10 @@
 // ----------------------------------------------------------------------------
 //  Cele 6 presetări, în forma folosită la randare.
 //
-//  ⚠️ SINCRONIZARE: numele, descrierile și paletele de accent trebuie să
-//  rămână identice cu `src/lib/parcPresets.js` din panoul de admin. Acolo alegi
-//  presetarea, aici se aplică. Dacă diverg, previzualizarea din formular minte.
+//  ⚠️ SINCRONIZARE: `name`, `summary` și `accents` trebuie să rămână identice
+//  cu `src/lib/parcPresets.js` din panoul de admin. Acolo alegi presetarea,
+//  aici se aplică. Dacă diverg, previzualizarea din formular minte.
+//  `summary` e folosit și de pagina de comparație /_presetari.
 //
 //  ── CE E O PRESETARE ──────────────────────────────────────────────────────
 //  Un STIL COMPLET, nu o paletă. Fiecare definește simultan: variantele de
@@ -36,6 +37,7 @@ export const PRESETS = [
     {
         id: 0,
         name: 'Clar',
+        summary: 'Luminos și aerisit, tipografie mare',
         variants: { header: 'a', hero: 'a', card: 'a', services: 'a', footer: 'a', sticky: 'pill' },
         fontDisplay: SANS,
         fontBody: SANS,
@@ -61,6 +63,7 @@ export const PRESETS = [
     {
         id: 1,
         name: 'Nocturn',
+        summary: 'Întunecat premium, accente calde',
         variants: { header: 'b', hero: 'b', card: 'b', services: 'b', footer: 'b', sticky: 'circle' },
         fontDisplay: SANS,
         fontBody: SANS,
@@ -86,6 +89,7 @@ export const PRESETS = [
     {
         id: 2,
         name: 'Compact',
+        summary: 'Dens, orientat pe specificații',
         variants: { header: 'c', hero: 'c', card: 'c', services: 'c', footer: 'a', sticky: 'bar' },
         fontDisplay: SANS,
         fontBody: SANS,
@@ -111,6 +115,7 @@ export const PRESETS = [
     {
         id: 3,
         name: 'Editorial',
+        summary: 'Serif la titluri, elegant',
         variants: { header: 'a', hero: 'd', card: 'd', services: 'd', footer: 'c', sticky: 'pill' },
         fontDisplay: SERIF,
         fontBody: SANS,
@@ -136,6 +141,7 @@ export const PRESETS = [
     {
         id: 4,
         name: 'Industrial',
+        summary: 'Contrast puternic, colțuri drepte',
         variants: { header: 'c', hero: 'a', card: 'c', services: 'c', footer: 'a', sticky: 'bar' },
         fontDisplay: COND,
         fontBody: SANS,
@@ -161,6 +167,7 @@ export const PRESETS = [
     {
         id: 5,
         name: 'Cald',
+        summary: 'Tonuri calde, colțuri rotunjite',
         variants: { header: 'b', hero: 'a', card: 'a', services: 'a', footer: 'c', sticky: 'pill' },
         fontDisplay: SANS,
         fontBody: SANS,

@@ -23,7 +23,7 @@
 //  `prefers-reduced-motion` dezactivează tot, la final.
 // ============================================================================
 
-export const CSS_VERSION = 'v2';
+export const CSS_VERSION = 'v3';
 
 export const SITE_CSS = `
 *,*::before,*::after{box-sizing:border-box}

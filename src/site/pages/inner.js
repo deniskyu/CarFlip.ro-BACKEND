@@ -1,7 +1,7 @@
 import { html, raw } from '../html.js';
 import { Layout } from '../layout.js';
 import { getPreset } from '../presets.js';
-import { Header, CarCard, CtaBand, Footer, StickyWhatsapp, ICONS } from '../components.js';
+import { Header, CarCard, cardVariant, CtaBand, Footer, StickyWhatsapp, ICONS } from '../components.js';
 import {
     qs, Breadcrumb, Filters, ActiveFilters, Pagination,
     Gallery, GALLERY_JS, SpecTable, Hours, MapBlock,
@@ -9,6 +9,7 @@ import {
 import { getLegalDoc } from '../legal/texts.js';
 import { autoDealerLd, vehicleLd, breadcrumbLd, itemListLd, faqLd } from '../../services/seo/jsonld.js';
 import { formatPhoneDisplay } from '../../utils/phone.js';
+
 // ============================================================================
 //  src/site/pages/inner.js
 // ----------------------------------------------------------------------------
@@ -22,9 +23,9 @@ import { formatPhoneDisplay } from '../../utils/phone.js';
 
 const origin = (parc) => `https://${parc.subdomain}.car-flip.com`;
 const shell = (parc, preset, waUrl, current, main) => html`
-${Header(parc, { current })}
+${Header(parc, { current, preset })}
 <main>${main}</main>
-${Footer(parc)}
+${Footer(parc, { preset })}
 ${StickyWhatsapp(parc, { whatsappUrl: waUrl, preset })}`;
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -33,7 +34,8 @@ ${StickyWhatsapp(parc, { whatsappUrl: waUrl, preset })}`;
 
 export const renderStoc = (parc, d) => {
     const preset = getPreset(parc.preset);
-    const dense = preset.variants.card === 'c';
+    // Litera de variantă pentru card vine din presetare (a/b/c/d).
+    const cv = cardVariant(preset);
     const o = origin(parc);
     const filtered = Object.keys(d.applied || {}).length > 0;
 
@@ -56,7 +58,7 @@ export const renderStoc = (parc, d) => {
 
   ${d.cars.length ? html`
   <div class="car-grid">
-    ${d.cars.map((c, i) => CarCard(c, { dense, eager: i < 3 }))}
+    ${d.cars.map((c, i) => CarCard(c, { variant: cv, eager: i < 3 }))}
   </div>
   ${Pagination({ page: d.page, pages: d.pages, basePath: '/stoc', query: d.query })}
   ` : html`
@@ -96,7 +98,8 @@ export const renderStoc = (parc, d) => {
 
 export const renderMasina = (parc, d) => {
     const preset = getPreset(parc.preset);
-    const dense = preset.variants.card === 'c';
+    // Litera de variantă pentru card vine din presetare (a/b/c/d).
+    const cv = cardVariant(preset);
     const o = origin(parc);
     const car = d.car;
 
@@ -182,7 +185,7 @@ export const renderMasina = (parc, d) => {
       </div>
       <a class="btn btn--ghost" href="/stoc">Vezi tot stocul ${ICONS.arrow(16)}</a>
     </div>
-    <div class="car-grid">${d.similar.map((c) => CarCard(c, { dense }))}</div>
+    <div class="car-grid">${d.similar.map((c) => CarCard(c, { variant: cv }))}</div>
   </section>` : ''}
 </div>`;
 
@@ -213,7 +216,8 @@ ${car.media?.length ? html`<script>${raw(GALLERY_JS)}</script>` : ''}`,
 
 export const renderMarca = (parc, d) => {
     const preset = getPreset(parc.preset);
-    const dense = preset.variants.card === 'c';
+    // Litera de variantă pentru card vine din presetare (a/b/c/d).
+    const cv = cardVariant(preset);
     const o = origin(parc);
     const path = d.model ? `/masini/${d.brand.slug}/${d.model.slug}` : `/masini/${d.brand.slug}`;
     const heading = d.model
@@ -235,7 +239,7 @@ export const renderMarca = (parc, d) => {
   </div>
 
   ${d.cars.length ? html`
-  <div class="car-grid">${d.cars.map((c, i) => CarCard(c, { dense, eager: i < 3 }))}</div>
+  <div class="car-grid">${d.cars.map((c, i) => CarCard(c, { variant: cv, eager: i < 3 }))}</div>
   ${Pagination({ page: d.page, pages: d.pages, basePath: path, query: d.query })}
   ` : html`<div class="empty-state"><p>Nu mai avem momentan modele disponibile aici.</p></div>`}
 
@@ -401,7 +405,8 @@ export const renderLegal = (parc, slug, d) => {
  */
 export const renderNotFound = (parc, d) => {
     const preset = getPreset(parc.preset);
-    const dense = preset.variants.card === 'c';
+    // Litera de variantă pentru card vine din presetare (a/b/c/d).
+    const cv = cardVariant(preset);
 
     const main = html`
 <div class="wrap nf">
@@ -419,7 +424,7 @@ export const renderNotFound = (parc, d) => {
 
 ${d.cars?.length ? html`
 <div class="wrap" style="padding-bottom:3rem">
-  <div class="car-grid">${d.cars.map((c) => CarCard(c, { dense }))}</div>
+  <div class="car-grid">${d.cars.map((c) => CarCard(c, { variant: cv }))}</div>
 </div>` : ''}`;
 
     return Layout({
