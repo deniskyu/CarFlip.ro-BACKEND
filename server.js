@@ -10,6 +10,8 @@ import { initSocket } from './src/socket/socketManager.js';
 import helmet from 'helmet';
 import adminRoute from './src/routes/adminRoute.js';
 
+
+import adminParcuriRoute from './src/routes/adminParcuriRoute.js';
 import resolveParc from './src/middleware/resolveParc.js';
 import siteTestRoute from './src/routes/siteTestRoute.js';
 
@@ -100,6 +102,7 @@ app.use(resolveParc);
 app.use(siteTestRoute);
 
 app.use(adminRoute);
+app.use(adminParcuriRoute);
 
 app.use(indexRoute);
 

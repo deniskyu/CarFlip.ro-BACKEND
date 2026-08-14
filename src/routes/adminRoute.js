@@ -63,7 +63,7 @@ const adminLoginLimiter = rateLimit({
     message: { success: false, message: "Prea multe încercări. Încearcă mai târziu." },
 });
 
-const adminFetchLimiter = rateLimit({
+export const adminFetchLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 6000,
     store: new RedisStore({
@@ -75,7 +75,7 @@ const adminFetchLimiter = rateLimit({
 
 // Limiter dedicat pentru acțiuni distructive (ștergere/ban din raport).
 // Generos pentru moderare umană, dar limitează blast radius-ul unui token furat.
-const adminActionLimiter = rateLimit({
+export const adminActionLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 200,
     store: new RedisStore({
