@@ -127,8 +127,23 @@ saleSchema.index({ user_id: 1, is_active: 1, production_year: -1 }); // sortare 
 saleSchema.index({ user_id: 1, is_active: 1, mileage: 1 });          // sortare
 
 
-saleSchema.pre('save', function (next) {
-    if (this.slug) return next();
+// ─── Generarea automată a slug-ului ─────────────────────────────────────────
+// Rulează la prima salvare a fiecărui anunț nou, indiferent din ce rută vine.
+// De aceea NU e nevoie să atingi userActions.js pentru asta.
+//
+// ⚠️ FĂRĂ parametrul `next`. Mongoose 9 / Kareem 3.3 au eliminat complet
+// middleware-ul pe bază de callback: `execPre` e async și apelează hook-ul cu
+// argumentele operației, fără să injecteze vreun callback. O semnătură
+// `function (next)` primește `undefined` și aruncă „next is not a function".
+//
+// Un hook sincron cu arietate 0 e stilul corect: Kareem îl apelează, vede că
+// nu întoarce o promisiune și continuă imediat.
+//
+// Condiția `if (this.slug) return` face hook-ul inofensiv la orice re-salvare
+// a unui anunț existent: slug-ul rămâne exact cum a fost generat prima dată,
+// deci URL-urile deja indexate de Google și cele date pe Facebook nu se rup.
+saleSchema.pre('save', function () {
+    if (this.slug) return;
     try {
         this.slug = generateSaleSlug(this);
     } catch (err) {
@@ -136,9 +151,7 @@ saleSchema.pre('save', function (next) {
         // Anunțul intră fără slug, iar backfill-ul îl prinde la următoarea rulare.
         console.warn(`⚠️ Nu am putut genera slug pentru anunț: ${err.message}`);
     }
-    next();
 });
-
 
 
 const sales = mongoose.models.sales || mongoose.model("sales", saleSchema);
