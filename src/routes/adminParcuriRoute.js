@@ -351,6 +351,9 @@ adminParcuri.get('/api/admin/parcuri/:id', adminFetchLimiter, authAdmin, async (
 adminParcuri.post('/api/admin/parcuri/create-user', adminActionLimiter, authAdmin, async (req, res) => {
     const username = str(req.body?.username);
     const email = str(req.body?.email).toLowerCase();
+    const phone = normalizePhone(req.body?.phone);
+    // Parolă la alegere. Lăsată goală → se generează una.
+    const wanted = typeof req.body?.password === 'string' ? req.body.password.trim() : '';
 
     if (!username || !email) {
         return res.status(400).json({ success: false, message: 'Username și email sunt obligatorii.' });
@@ -360,6 +363,12 @@ adminParcuri.post('/api/admin/parcuri/create-user', adminActionLimiter, authAdmi
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return res.status(400).json({ success: false, message: 'Email invalid.' });
+    }
+    if (wanted && (wanted.length < 8 || wanted.length > 32)) {
+        return res.status(400).json({ success: false, message: 'Parola trebuie să aibă între 8 și 32 de caractere.' });
+    }
+    if (phone && !/^\d{10,15}$/.test(phone)) {
+        return res.status(400).json({ success: false, message: 'Număr de telefon invalid.' });
     }
 
     try {
@@ -374,22 +383,31 @@ adminParcuri.post('/api/admin/parcuri/create-user', adminActionLimiter, authAdmi
         // Alfabet fără caractere ambigue (0/O, 1/l/I) — parola se dictează
         // adesea la telefon sau se scrie pe o hârtie.
         const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-        const plain = Array.from({ length: 12 },
+        const plain = wanted || Array.from({ length: 12 },
             () => ALPHABET[Math.floor(Math.random() * ALPHABET.length)]).join('');
 
         const salt = await bcrypt.genSalt(10);
         const hashed = await bcrypt.hash(plain, salt);
 
+        // Telefonul intră în `metaData.phoneNumber` — exact cheia pe care o
+        // citește aplicația mobilă pentru profil. Așa dealerul găsește contul
+        // deja completat când intră prima dată în aplicație.
+        const metaData = phone ? { phoneNumber: phone } : {};
+
         const user = await users.create({
             username, email, password: hashed,
-            isVerified: true,   // creat de admin → considerat verificat
+            isVerified: true,   // creat de admin → sare peste fluxul de OTP
+            metaData,
         });
 
         return res.json({
             success: true,
-            message: 'Cont creat. Notează parola — nu mai poate fi afișată.',
+            message: wanted
+                ? 'Cont creat cu parola aleasă de tine.'
+                : 'Cont creat. Notează parola — nu mai poate fi afișată.',
             user: { _id: user._id, username: user.username, email: user.email },
             password: plain,
+            generated: !wanted,
         });
     } catch (err) {
         if (err.code === 11000) {

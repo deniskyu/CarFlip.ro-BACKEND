@@ -2,35 +2,23 @@ import users from '../models/userModel.js';
 import { parseCookies, readSession, COOKIE_NAME, destroySession, clearSessionCookie } from '../services/dealerSession.js';
 
 // ============================================================================
-//  src/middleware/authDealer.js
+//  src/middleware/authDealer.js   — checkOrigin CORECTAT
 // ----------------------------------------------------------------------------
 //  Autentificarea din panoul dealerului. Trei verificări, în ordinea asta:
-//
 //    1. sesiunea există în Redis
 //    2. sesiunea aparține PARCULUI DIN HOSTNAME
-//    3. utilizatorul mai există și nu e banat
+//    3. utilizatorul mai există, nu e banat, și chiar deține acest parc
 //
-//  ── DE CE PASUL 2 E ESENȚIAL ──────────────────────────────────────────────
-//  Cookie-ul e setat pe `.car-flip.com`, deci browserul îl trimite către TOATE
-//  subdomeniile. Fără verificarea asta, Bogdan se loghează pe
-//  bogdan.car-flip.com/admin, scrie apoi autored.car-flip.com/admin în bara de
-//  adrese, browserul trimite cookie-ul lui, iar serverul îl lasă înăuntru în
-//  panoul altui dealer.
-//
-//  Verificarea stă AICI, nu în rute. Se aplică automat pe tot ce e sub /admin,
-//  deci nu poate fi uitată la o rută nouă. Asta e diferența dintre „o linie de
-//  cod" și un sistem: nu depinde de disciplina cuiva la fiecare adăugare.
-//
-//  ── APĂRAREA A DOUA ───────────────────────────────────────────────────────
-//  Fiecare query din rute poartă `user_id` din sesiune, ca parte din FILTRU, nu
-//  ca verificare ulterioară. Un anunț al altui dealer pur și simplu nu se
-//  găsește — chiar dacă middleware-ul de mai sus ar fi ocolit cumva.
+//  Verificarea 2 stă AICI, nu în rute: se aplică automat pe tot ce e sub
+//  /admin, deci nu poate fi uitată la o rută nouă. Cookie-ul e setat pe
+//  `.car-flip.com`, deci browserul îl trimite către TOATE subdomeniile — fără
+//  verificarea asta, un dealer ar intra în panoul altuia scriind alt subdomeniu
+//  în bara de adrese.
 // ============================================================================
 
-/**
- * Atașează `req.dealer` dacă sesiunea e validă. NU respinge — folosit pe
- * pagina de login, care trebuie să știe dacă utilizatorul e deja autentificat.
- */
+const ROOT_DOMAIN = (process.env.SITE_ROOT_DOMAIN || 'car-flip.com').toLowerCase();
+const DEBUG = process.env.SITE_DEBUG_HEADER === 'true';
+
 export const loadDealer = async (req, res, next) => {
     req.dealer = null;
     try {
@@ -42,23 +30,18 @@ export const loadDealer = async (req, res, next) => {
         const session = await readSession(sid);
         if (!session) return next();
 
-        // ── Izolarea pe tenant ──────────────────────────────────────────────
         // Sesiunea e legată de un parc anume. Pe alt subdomeniu, nu e validă.
-        if (String(session.parcId) !== String(req.parc._id)) {
-            return next();
-        }
+        if (String(session.parcId) !== String(req.parc._id)) return next();
 
         const user = await users.findById(session.userId)
             .select('_id username email isBanned').lean();
 
-        // Utilizator șters sau banat între autentificare și acum → sesiunea moare.
         if (!user || user.isBanned) {
             await destroySession(sid);
             clearSessionCookie(res);
             return next();
         }
 
-        // Ultima verificare: contul chiar deține acest parc?
         if (String(req.parc.user_id) !== String(user._id)) {
             await destroySession(sid);
             clearSessionCookie(res);
@@ -74,49 +57,98 @@ export const loadDealer = async (req, res, next) => {
     }
 };
 
-/** Cere autentificare. Paginile redirecționează, API-ul întoarce 401. */
 export const requireDealer = (req, res, next) => {
     if (req.dealer) return next();
-
     if (req.path.startsWith('/admin/api/')) {
         return res.status(401).json({ success: false, message: 'Sesiune expirată. Autentifică-te din nou.' });
     }
     return res.redirect('/admin');
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+//  PROTECȚIE CSRF
+// ════════════════════════════════════════════════════════════════════════════
+
 /**
- * Protecție CSRF pentru operațiile care modifică date.
+ * Extrage hostname-ul dintr-un Origin sau Referer.
  *
- * `SameSite=Lax` blochează deja cererile cross-site declanșate automat, dar
- * verificarea originii acoperă și cazurile de la margine. Cost: trei linii.
+ * ⚠️ Comparația se face pe hostname PARSAT, niciodată cu `startsWith`.
+ * `origin.startsWith('https://' + host)` pare corect, dar
+ * `https://bogdan.car-flip.com.evil.com` începe exact așa și ar trece —
+ * breșă clasică. `new URL()` nu poate fi păcălit nici cu sufixe, nici cu port,
+ * nici cu credențiale în URL.
+ */
+const originHostOf = (value) => {
+    try { return new URL(value).hostname.toLowerCase(); }
+    catch { return null; }
+};
+
+/**
+ * Lista gazdelor acceptate pentru cererea curentă.
+ *
+ * ── DE CE TREI SURSE, NU DOAR `req.hostname` ──────────────────────────────
+ * `req.hostname` depinde de `trust proxy` și de anteturile pe care le pune
+ * proxy-ul din față. Cu `trust proxy: 2`, Express citește `X-Forwarded-Host`
+ * dacă există — iar unele configurații de nginx sau Cloudflare îl setează la
+ * numele intern al serverului, nu la cel cerut de vizitator. Rezultatul: un
+ * login perfect legitim era respins cu „origine invalidă".
+ *
+ * Sursa cea mai sigură e PARCUL DEJA REZOLVAT: dacă `resolveParc` a găsit
+ * parcul, atunci `<subdomain>.<root>` e cu certitudine gazda corectă,
+ * indiferent ce spun anteturile.
+ */
+const allowedHosts = (req) => {
+    const set = new Set();
+
+    if (req.parc?.subdomain) set.add(`${req.parc.subdomain}.${ROOT_DOMAIN}`);
+    if (req.parc?.custom_domain) set.add(String(req.parc.custom_domain).toLowerCase());
+
+    if (req.hostname) set.add(String(req.hostname).toLowerCase());
+
+    // Header-ul Host brut, fără port — nu trece prin logica de `trust proxy`.
+    const rawHost = String(req.headers.host || '').toLowerCase().split(':')[0];
+    if (rawHost) set.add(rawHost);
+
+    return set;
+};
+
+/**
+ * Blochează cererile care modifică date și vin de pe alt site.
+ *
+ * `SameSite=Lax` acoperă deja majoritatea cazurilor; verificarea asta prinde
+ * restul. Cost: o comparație într-un Set.
  */
 export const checkOrigin = (req, res, next) => {
     if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
 
-    const origin = req.headers.origin || req.headers.referer;
-    if (!origin) {
+    const raw = req.headers.origin || req.headers.referer;
+    if (!raw) {
         // Fără Origin ȘI fără Referer: nu e un browser modern făcând o cerere
         // normală. Respingem, în loc să presupunem că e în regulă.
-        return res.status(403).json({ success: false, message: 'Cerere respinsă.' });
+        console.warn(`[checkOrigin] Fără Origin/Referer pe ${req.method} ${req.originalUrl}`);
+        return res.status(403).json({ success: false, message: 'Cerere respinsă (lipsește originea).' });
     }
 
-    // ⚠️ Comparație pe HOSTNAME PARSAT, niciodată cu startsWith.
-    //
-    // `origin.startsWith('https://' + req.hostname)` pare corect, dar e o breșă
-    // clasică: `https://bogdan.car-flip.com.evil.com` începe exact așa și ar
-    // trece verificarea. Un atacator își înregistrează un domeniu care începe
-    // cu hostname-ul țintă și poate declanșa acțiuni în numele dealerului.
-    //
-    // `new URL()` extrage hostname-ul real; comparația exactă nu poate fi
-    // păcălită nici cu sufixe, nici cu port, nici cu credențiale în URL.
-    let originHost = null;
-    try { originHost = new URL(origin).hostname.toLowerCase(); } catch { /* malformat */ }
+    const oHost = originHostOf(raw);
+    const allowed = allowedHosts(req);
 
-    if (!originHost || originHost !== String(req.hostname || '').toLowerCase()) {
-        console.warn(`[authDealer] Origine respinsă: ${origin} pentru ${req.hostname}`);
-        return res.status(403).json({ success: false, message: 'Cerere respinsă (origine invalidă).' });
-    }
-    return next();
+    if (oHost && allowed.has(oHost)) return next();
+
+    // Diagnostic explicit: fără el, „origine invalidă" e o cutie neagră.
+    console.warn(
+        `[checkOrigin] RESPINS ${req.method} ${req.originalUrl}\n` +
+        `   origin/referer : ${raw}\n` +
+        `   hostname extras: ${oHost}\n` +
+        `   gazde acceptate: ${[...allowed].join(', ') || '(niciuna)'}\n` +
+        `   req.hostname=${req.hostname} · Host=${req.headers.host} · ` +
+        `X-Forwarded-Host=${req.headers['x-forwarded-host'] || '—'}`
+    );
+
+    return res.status(403).json({
+        success: false,
+        message: 'Cerere respinsă (origine invalidă).',
+        ...(DEBUG ? { debug: { origin: oHost, allowed: [...allowed] } } : {}),
+    });
 };
 
 export default { loadDealer, requireDealer, checkOrigin };
