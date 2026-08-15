@@ -17,6 +17,9 @@ import {
     drainSocialCleanup,
     reportSocialHealth,
 } from '../services/socialPromo/socialPromoService.js';
+import {
+    protectDealerSales, reviveDealerSales, reportStaleSales, reportParcHealth,
+} from './parcMaintenance.js';
 
 //const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -73,6 +76,15 @@ const startCronJobs = () => {
     cron.schedule('0 3 * * *', async () => {
     //cron.schedule('29 16 * * *', async () => {
         try {
+            // ─── Protecția site-urilor de parcuri ───────────────────────────────────
+            // TREBUIE să ruleze PRIMA. Prelungește anunțurile parcurilor cu site activ
+            // înainte ca logica de mai jos să le treacă în grace period.
+            //
+            // Ordinea nu e cosmetică: dacă ar rula după, mașinile ar dispărea de pe
+            // site-ul dealerului pentru cele 10 zile de grație. Așa, nu dispar nicio zi.
+            await protectDealerSales();
+            await reviveDealerSales();
+            await reportParcHealth();
             console.log('⏳ Începe Cron Job curățarea generală...');
             const now = new Date();
             const yesterday = new Date(now.getTime() - (24 * 60 * 60 * 1000));
@@ -344,6 +356,18 @@ const startCronJobs = () => {
             await reportSocialHealth();
         } catch (err) {
             console.error('❌ Eroare cron social health:', err.message);
+        }
+    }, { scheduled: true, timezone: 'Europe/Bucharest' });
+
+    // ─── Raport lunar: anunțuri învechite la parcurile auto ───────────────
+    // Întâi ale lunii, la 4 dimineața. Doar RAPORTEAZĂ în log — nu șterge.
+    // Un dealer poate avea legitim o mașină în stoc de un an; ștergerea
+    // automată i-ar șterge marfa reală, ireversibil, fără ca el să afle.
+    cron.schedule('0 4 1 * *', async () => {
+        try {
+            await reportStaleSales();
+        } catch (err) {
+            console.error('❌ Eroare cron raport anunțuri învechite:', err.message);
         }
     }, { scheduled: true, timezone: 'Europe/Bucharest' });
 

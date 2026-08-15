@@ -18,6 +18,7 @@ import { uploadParcImage, deleteParcImage } from '../utils/parcUpload.js';
 import { invalidateParcCache, warmParcCache } from '../services/parcCache.js';
 import { getStockStats, computeIndexable, refreshIndexable } from '../services/indexableCheck.js';
 import { enqueueSocialCleanup } from '../services/socialPromo/socialPromoService.js';
+import { destroyParcSessions } from '../services/dealerSession.js';
 
 // ============================================================================
 //  src/routes/adminParcuriRoute.js
@@ -580,6 +581,10 @@ adminParcuri.post('/api/admin/parcuri/:id/toggle', adminActionLimiter, authAdmin
         if (!parc.active) parc.indexable = false;   // dezactivat → sigur nu indexabil
         await parc.save();
 
+        // Site dezactivat → sesiunile dealerului mor instant. Fără asta, ar
+        // putea continua să lucreze într-un panou al unui site inexistent.
+        if (!parc.active) await destroyParcSessions(parc._id);
+
         await invalidateParcCache(parc.subdomain);
         if (parc.active) {
             await refreshIndexable(parc.toObject());
@@ -630,6 +635,7 @@ adminParcuri.delete('/api/admin/parcuri/:id', adminActionLimiter, authAdmin, asy
         if (!parc) return res.status(404).json({ success: false, message: 'Parcul nu există.' });
 
         await parcuri.deleteOne({ _id: id });
+        await destroyParcSessions(parc._id);
         await invalidateParcCache(parc.subdomain);
         await deleteParcImage(parc.logo_public_id);
         await deleteParcImage(parc.banner_public_id);
@@ -707,6 +713,7 @@ adminParcuri.delete('/api/admin/parcuri/:id/with-stock', adminActionLimiter, aut
         }
 
         await parcuri.deleteOne({ _id: id });
+        await destroyParcSessions(parc._id);
         await invalidateParcCache(parc.subdomain);
         await deleteParcImage(parc.logo_public_id);
         await deleteParcImage(parc.banner_public_id);
