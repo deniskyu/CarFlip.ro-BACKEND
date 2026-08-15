@@ -17,6 +17,7 @@ import siteRoute from './src/routes/siteRoute.js';
 import siteApiRoute from './src/routes/siteApiRoute.js';
 import siteSeoRoute from './src/routes/siteSeoRoute.js';
 import dealerAdminRoute from './src/routes/dealerAdminRoute.js';
+import blockSiteLeak from './src/middleware/blockSiteLeak.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -111,6 +112,8 @@ app.use(siteSeoRoute);
 app.use(dealerAdminRoute);
 
 app.use(siteRoute);   
+
+app.use(blockSiteLeak); 
 
 app.use(adminRoute);
 app.use(adminParcuriRoute);
