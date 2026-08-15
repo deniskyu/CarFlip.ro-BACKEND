@@ -60,14 +60,19 @@ const mix = (a, b, amount) => ({
 });
 
 /**
- * Corectează un accent care nu are contrast suficient nici cu alb, nici cu
- * negru — cazul galbenului aprins, care e ilizibil în ambele variante.
- * Îl întunecăm progresiv până trece pragul WCAG AA pentru text mare (3:1).
+ * Corectează un accent care nu are contrast suficient cu fundalul presetării.
+ *
+ * ⚠️ Direcția depinde de fundal. Pe o presetare deschisă (Clar, Editorial)
+ * accentul se ÎNTUNECĂ; pe una întunecată (Nocturn) se LUMINEAZĂ. Varianta
+ * care întuneca mereu funcționa pe fundal alb, dar pe fundal negru făcea un
+ * accent închis și mai închis — exact invers decât trebuie.
  */
 const ensureUsableAccent = (rgb, bgRgb) => {
+    // Fundal întunecat → luminăm. Fundal deschis → întunecăm.
+    const target = luminance(bgRgb) < 0.25 ? WHITE : BLACK;
     let cur = rgb;
-    for (let i = 0; i < 12 && contrast(cur, bgRgb) < 3; i++) {
-        cur = mix(cur, BLACK, 0.12);
+    for (let i = 0; i < 14 && contrast(cur, bgRgb) < 3; i++) {
+        cur = mix(cur, target, 0.12);
     }
     return cur;
 };
