@@ -16,6 +16,7 @@ import resolveParc from './src/middleware/resolveParc.js';
 import siteRoute from './src/routes/siteRoute.js';
 import siteApiRoute from './src/routes/siteApiRoute.js';
 import siteSeoRoute from './src/routes/siteSeoRoute.js';
+import dealerAdminRoute from './src/routes/dealerAdminRoute.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -106,6 +107,8 @@ app.use(resolveParc);
 // nerezolvată, deci rutele reale trebuie să apuce request-ul primele.
 app.use(siteApiRoute);
 app.use(siteSeoRoute);
+
+app.use(dealerAdminRoute);
 
 app.use(siteRoute);   
 
