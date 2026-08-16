@@ -6,6 +6,7 @@ import { SITE_CSS, CSS_VERSION } from '../site/styles.js';
 import { PAGES_CSS } from '../site/stylesPages.js';
 import { VARIANTS_CSS } from '../site/stylesVariants.js';
 import { renderPresetari } from '../site/pages/presetari.js';
+import { buildFavicon } from '../services/favicon.js';
 import { renderHome } from '../site/pages/home.js';
 import {
     renderStoc, renderMasina, renderMarca, renderContact, renderLegal, renderNotFound,
@@ -154,6 +155,25 @@ siteRoute.get('/_presetari', siteLimiter, (req, res, next) => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+//  FAVICON ROTUNJIT
+// ────────────────────────────────────────────────────────────────────────────
+//  Generat din logo, cache 24h în Redis. La orice eșec, redirect către logo-ul
+//  brut: un favicon pătrat e o problemă cosmetică, o eroare 500 nu e.
+// ════════════════════════════════════════════════════════════════════════════
+siteRoute.get('/favicon.png', siteLimiter, async (req, res, next) => {
+    if (!req.isSite || !req.parc) return next();
+    try {
+        const png = await buildFavicon(req.parc);
+        if (!png) return res.redirect(302, req.parc.logo_url);
+        return res.status(200).type('image/png')
+            .set('Cache-Control', 'public, max-age=86400')
+            .send(png);
+    } catch {
+        return res.redirect(302, req.parc.logo_url);
+    }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
 //  ACASĂ
 // ════════════════════════════════════════════════════════════════════════════
 siteRoute.get('/', siteLimiter, async (req, res, next) => {
@@ -217,9 +237,23 @@ siteRoute.get('/stoc', siteLimiter, async (req, res, next) => {
         };
         range('pret', 'price', 'pret_min', 'pret_max');
         range('an', 'production_year', 'an_min', 'an_max');
+        range('km', 'mileage', 'km_min', 'km_max');
 
-        const km = num(q.km_max);
-        if (km !== null) { query.mileage = { $lte: km }; applied.km_max = km; raw.km_max = km; }
+        // Intervale inversate → le schimbăm între ele în loc să nu returnăm
+        // nimic. Cineva care scrie manual `?pret_min=20000&pret_max=5000` a
+        // vrut evident intervalul 5000–20000, nu o pagină goală.
+        for (const [lo, hi, field] of [
+            ['pret_min', 'pret_max', 'price'],
+            ['an_min', 'an_max', 'production_year'],
+            ['km_min', 'km_max', 'mileage'],
+        ]) {
+            if (applied[lo] != null && applied[hi] != null && applied[lo] > applied[hi]) {
+                const t = applied[lo];
+                applied[lo] = applied[hi]; applied[hi] = t;
+                raw[lo] = applied[lo]; raw[hi] = applied[hi];
+                query[field] = { $gte: applied[lo], $lte: applied[hi] };
+            }
+        }
 
         const fuel = str(q.combustibil);
         if (fuel && (filters.fuels || []).includes(fuel)) {

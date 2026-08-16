@@ -44,10 +44,15 @@ export const PAGES_CSS = `
 .f-pair{display:flex;gap:.5rem}
 .f-pair input{flex:1;min-width:0}
 .filters-actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem;align-items:center}
-.filters-actions .btn{flex:1}
+.filters-actions .btn{flex:1;min-width:140px}
 @media(min-width:600px){.filters-actions .btn{flex:0 0 auto}}
-.f-reset{font-size:.87rem;color:var(--muted);text-decoration:underline}
-.f-reset:hover{color:var(--accent)}
+
+.f-error{
+  margin-top:.9rem;padding:.7rem .9rem;border-radius:var(--radius-sm);
+  background:#fef2f2;border:1px solid #fecaca;color:#991b1b;
+  font-size:.87rem;line-height:1.5;
+}
+.f-field select:disabled{opacity:.55;cursor:not-allowed}
 
 .active-filters{display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:1.2rem}
 .af{display:inline-flex;align-items:center;gap:.45rem;padding:.4rem .75rem;
@@ -70,7 +75,10 @@ export const PAGES_CSS = `
 .pager .off{opacity:.35;pointer-events:none}
 
 /* ── Pagina mașinii ──────────────────────────────────────────────────────── */
-.car-layout{display:grid;gap:clamp(1.4rem,1rem + 2vw,2.6rem);grid-template-columns:1fr}
+/* Spațiu sub coloane: fără el, cardul „Vizionare" se lipea de footer când
+   parcul nu mai avea alte anunțuri de arătat dedesubt. */
+.car-layout{display:grid;gap:clamp(1.4rem,1rem + 2vw,2.6rem);grid-template-columns:1fr;
+  padding-bottom:clamp(2rem,1.5rem + 2vw,3.5rem)}
 @media(min-width:960px){.car-layout{grid-template-columns:minmax(0,1.55fr) minmax(300px,1fr);
   align-items:start}}
 
@@ -94,25 +102,44 @@ export const PAGES_CSS = `
 .gal-thumb img{width:100%;height:100%;object-fit:cover}
 .gal-thumb:hover{border-color:var(--accent)}
 
-/* Lightbox pe <dialog> nativ: primește gestionarea Escape și focus trap gratis. */
-.lb{border:none;padding:0;max-width:100vw;max-height:100vh;width:100vw;height:100vh;
-  background:rgba(8,8,10,.96)}
-.lb::backdrop{background:rgba(8,8,10,.9)}
-.lb-stage{width:100%;height:100%;display:flex;align-items:center;justify-content:center;
-  overflow:auto;touch-action:pan-x pan-y pinch-zoom;padding:1rem}
-.lb-stage img{max-width:100%;max-height:100%;object-fit:contain;
-  transition:transform var(--t-base) var(--ease);cursor:zoom-in}
-.lb-stage.is-zoomed{align-items:flex-start;justify-content:flex-start}
-.lb-stage.is-zoomed img{max-width:none;max-height:none;width:200%;cursor:zoom-out}
+/* Lightbox: pistă cu scroll-snap, fără niciun handler de touch.
+   Varianta veche intercepta swipe-ul și dublu-tap-ul, ceea ce se bătea cu
+   pinch-ul nativ — începeai să dai zoom și sărea la fotografia alăturată. */
+.lb{border:none;padding:0;width:100vw;height:100dvh;max-width:100vw;max-height:100dvh;
+  background:rgba(8,8,10,.97);overflow:hidden}
+.lb::backdrop{background:rgba(8,8,10,.92)}
+.lb-track{
+  display:flex;height:100%;width:100%;
+  overflow-x:auto;overflow-y:hidden;
+  scroll-snap-type:x mandatory;
+  scrollbar-width:none;-webkit-overflow-scrolling:touch;
+}
+.lb-track::-webkit-scrollbar{display:none}
+.lb-slide{
+  flex:0 0 100%;height:100%;scroll-snap-align:center;
+  display:flex;align-items:center;justify-content:center;
+  padding:1rem;
+}
+.lb-slide img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}
 .lb-close,.lb-nav{position:fixed;z-index:2;display:inline-flex;align-items:center;
   justify-content:center;width:48px;height:48px;border-radius:50%;
-  background:rgba(255,255,255,.14);color:#fff;backdrop-filter:blur(6px)}
+  background:rgba(255,255,255,.16);color:#fff;backdrop-filter:blur(6px);
+  transition:background .15s ease,transform .15s ease}
+.lb-close:hover,.lb-nav:hover{background:rgba(255,255,255,.28)}
+.lb-close:active,.lb-nav:active{transform:scale(.94)}
 .lb-close{top:1rem;right:1rem}
 .lb-prev{left:1rem;top:50%;transform:translateY(-50%)}
 .lb-next{right:1rem;top:50%;transform:translateY(-50%)}
+.lb-prev:active,.lb-next:active{transform:translateY(-50%) scale(.94)}
+/* Săgețile sunt pentru mouse. Pe telefon derulezi cu degetul, iar butoanele
+   ar acoperi fotografia. */
+@media(max-width:699px){.lb-nav{display:none}}
 .lb-count{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);
-  padding:.4rem .9rem;border-radius:100px;background:rgba(255,255,255,.14);
+  padding:.4rem .9rem;border-radius:100px;background:rgba(255,255,255,.16);
   color:#fff;font-size:.85rem;font-weight:700;backdrop-filter:blur(6px)}
+
+.gal-thumb-v{display:flex;align-items:center;justify-content:center;
+  height:100%;color:#fff;font-size:20px;background:#3f3f46}
 
 /* Panoul lateral cu preț și contact */
 .car-aside{position:sticky;top:84px;display:flex;flex-direction:column;gap:1rem}

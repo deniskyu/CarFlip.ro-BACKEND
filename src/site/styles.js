@@ -30,7 +30,14 @@ export const SITE_CSS = `
 html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body,h1,h2,h3,h4,p,figure,blockquote,dl,dd,ul,ol{margin:0}
 ul[class],ol[class]{list-style:none;padding:0}
-img,picture,video,svg{display:block;max-width:100%}
+img,picture,video{display:block;max-width:100%}
+
+/* ⚠️ SVG-urile NU sunt block.
+   Cu 'display:block' din reset, o iconiță scrisă inline într-un titlu
+   ('<h4>[ceas] Program</h4>') sare pe rândul de deasupra textului, lipită de
+   el. De aici „ceasul nu are margine în jos" — nu era o problemă de spațiere,
+   ci de tip de afișare. */
+svg{display:inline-block;vertical-align:middle;max-width:100%;flex-shrink:0}
 input,button,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer;background:none;border:none;padding:0}
 a{color:inherit;text-decoration:none}
@@ -41,6 +48,15 @@ body{
   font-size:16px;line-height:1.6;
   -webkit-font-smoothing:antialiased;
   overflow-x:hidden;
+}
+
+/* Titlurile care conțin o iconiță devin rând flex: iconița stă lângă text,
+   aliniată optic, cu spațiu constant. */
+h2:has(> svg), h3:has(> svg), h4:has(> svg){
+  display:flex;align-items:center;gap:.5rem;
+}
+@supports not selector(:has(*)){
+  h2 > svg, h3 > svg, h4 > svg{ margin-right:.45rem; }
 }
 
 h1,h2,h3,.display{
@@ -231,11 +247,20 @@ h3{font-size:clamp(1.1rem,.98rem + .55vw,1.4rem)}
   transition:border-color var(--t-base) var(--ease),transform var(--t-base) var(--ease);
 }
 .svc:hover{border-color:var(--accent-line);transform:translateY(var(--lift))}
+/* 'flex-shrink:0' e obligatoriu: în varianta orizontală (.svc--row) iconița e
+   copil flex și se turtea — pătratul de fundal devenea dreptunghi îngust, iar
+   primul card arăta mai rău decât restul pentru că avea titlul mai lung.
+   'aspect-ratio' garantează pătratul chiar dacă se schimbă vreodată mărimile. */
 .svc-icon{
   display:inline-flex;align-items:center;justify-content:center;
-  width:46px;height:46px;border-radius:calc(var(--radius) * .75);
+  width:46px;height:46px;aspect-ratio:1;flex-shrink:0;flex-grow:0;
+  border-radius:calc(var(--radius) * .75);
   background:var(--accent-soft);color:var(--accent);margin-bottom:1rem;
 }
+.svc-icon svg{flex-shrink:0}
+.svc--row{align-items:flex-start}
+.svc--row .svc-icon{margin-bottom:0;width:42px;height:42px}
+.svc--row > div{min-width:0}
 .svc h3{margin-bottom:.5rem}
 .svc p{color:var(--muted);font-size:.94rem}
 /* Variantă orizontală (presetările dense) */
@@ -303,11 +328,25 @@ h3{font-size:clamp(1.1rem,.98rem + .55vw,1.4rem)}
 .footer-made{display:flex;flex-wrap:wrap;align-items:center;gap:.7rem;
   font-size:.8rem;opacity:.6;margin-top:.4rem}
 .footer-made a{font-weight:700;opacity:.95}
-.store-badges{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:1rem}
+/* Blocul de aplicație, lângă mențiunea CarFlip din subsol */
+.footer-app{
+  margin-top:1.4rem;padding-top:1.3rem;
+  border-top:1px solid rgba(255,255,255,.14);
+}
+.footer-app h4{margin-bottom:.35rem;opacity:.75}
+.footer-app p{font-size:.82rem;opacity:.55;line-height:1.6;max-width:46ch;margin-bottom:.9rem}
+@media(min-width:700px){
+  .footer-app{display:flex;align-items:center;justify-content:space-between;gap:2rem;flex-wrap:wrap}
+  .footer-app > div{flex-shrink:0}
+  .footer-app p{margin-bottom:0}
+}
+.store-badges{display:flex;flex-wrap:wrap;gap:.6rem}
 .store-badge{display:inline-flex;align-items:center;gap:.55rem;
   padding:.55rem .9rem;border-radius:10px;border:1px solid rgba(255,255,255,.24);
   font-size:.78rem;line-height:1.15;transition:background var(--t-fast) var(--ease)}
-.store-badge:hover{background:rgba(255,255,255,.1)}
+.store-badge{transition:background var(--t-fast) var(--ease),transform var(--t-fast) var(--ease)}
+.store-badge:hover{background:rgba(255,255,255,.12);transform:translateY(-2px)}
+.store-badge:active{transform:translateY(0) scale(.98)}
 .store-badge b{display:block;font-size:.92rem}
 .store-badge span{opacity:.7}
 
@@ -347,6 +386,80 @@ h3{font-size:clamp(1.1rem,.98rem + .55vw,1.4rem)}
     }
   }
 }
+
+/* ── Intrarea în pagină ──────────────────────────────────────────────────── */
+/* Doar antetul și conținutul din hero. Restul paginii rămâne static la
+   încărcare: o pagină în care se mișcă tot la deschidere pare lentă, iar
+   Google penalizează mișcarea care întârzie conținutul. */
+@media(prefers-reduced-motion:no-preference){
+  .site-header{animation:hdr-in var(--t-slow) var(--ease) both}
+  @keyframes hdr-in{from{opacity:0;transform:translateY(-100%)}to{opacity:1;transform:none}}
+
+  .hero-inner > *{animation:hero-in var(--t-slow) var(--ease) both}
+  .hero-inner > *:nth-child(1){animation-delay:60ms}
+  .hero-inner > *:nth-child(2){animation-delay:120ms}
+  .hero-inner > *:nth-child(3){animation-delay:180ms}
+  .hero-inner > *:nth-child(4){animation-delay:240ms}
+  .hero-inner > *:nth-child(5){animation-delay:300ms}
+  @keyframes hero-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+}
+
+/* ── Interacțiuni ────────────────────────────────────────────────────────── */
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:translateY(0) scale(.985)}
+.chip:active{transform:scale(.97)}
+.car-wa:active{transform:scale(.985)}
+
+/* Subliniere care crește de la stânga, în loc de fundal plin */
+@media(min-width:900px){
+  .nav a{position:relative}
+  .nav a::after{
+    content:'';position:absolute;left:.9rem;right:.9rem;bottom:.35rem;height:2px;
+    background:var(--accent);transform:scaleX(0);transform-origin:left;
+    transition:transform var(--t-base) var(--ease);
+  }
+  .nav a:hover::after,.nav a[aria-current]::after{transform:scaleX(1)}
+}
+
+.footer-list a{position:relative;display:inline-block}
+.footer-list a:hover{transform:translateX(3px);text-decoration:none}
+.footer-list a{transition:transform var(--t-fast) var(--ease),opacity var(--t-fast) var(--ease)}
+
+/* ── Animația bannerului, per presetare ──────────────────────────────────── */
+/* Imaginea pornește ușor mărită, ca mișcarea să nu descopere marginile.
+   Durate lungi (24–40s) și amplitudini mici: la o privire scurtă abia se
+   simte, dar pagina nu mai pare înghețată. */
+.hero-media img{will-change:transform;transform:scale(1.06)}
+@media(prefers-reduced-motion:no-preference){
+  .hero--anim-zoom .hero-media img{animation:bg-zoom 32s var(--ease) infinite alternate}
+  .hero--anim-zoomout .hero-media img{animation:bg-zoomout 30s var(--ease) infinite alternate}
+  .hero--anim-panx .hero-media img{animation:bg-panx 36s var(--ease) infinite alternate}
+  .hero--anim-kenburns .hero-media img{animation:bg-kenburns 40s var(--ease) infinite alternate}
+}
+@keyframes bg-zoom{from{transform:scale(1.04)}to{transform:scale(1.16)}}
+@keyframes bg-zoomout{from{transform:scale(1.16)}to{transform:scale(1.04)}}
+@keyframes bg-panx{
+  from{transform:scale(1.12) translateX(-2.2%)}
+  to{transform:scale(1.12) translateX(2.2%)}
+}
+@keyframes bg-kenburns{
+  from{transform:scale(1.06) translate(-1.4%,-1%)}
+  to{transform:scale(1.15) translate(1.4%,1%)}
+}
+
+/* ── Blocul de descriere ─────────────────────────────────────────────────── */
+/* Fără chenar, descrierea arăta ca un SMS lipit de restul paginii. Fundalul
+   abia diferit față de pagină o delimitează fără să o transforme într-o casetă
+   grea, iar linia de accent din stânga o leagă vizual de brandul parcului. */
+.prose-box{
+  background:var(--surface);
+  border:var(--border-w) solid var(--border);
+  border-left:3px solid var(--accent-line);
+  border-radius:var(--radius);
+  padding:clamp(1.1rem,.9rem + .8vw,1.7rem);
+}
+.prose-box p{margin-bottom:0}
+.prose-box p + p{margin-top:1rem}
 
 /* ── Utilitare ───────────────────────────────────────────────────────────── */
 .stack-sm > * + *{margin-top:.5rem}

@@ -71,7 +71,10 @@ ${description ? html`<meta name="description" content="${description}">` : ''}
 
 <link rel="preconnect" href="${mediaOrigin}" crossorigin>
 <link rel="dns-prefetch" href="${mediaOrigin}">
-<link rel="icon" href="${parc.logo_url}">
+<!-- Favicon generat rotund din logo (vezi services/favicon.js). Browserul
+     desenează fișierul exact cum e — CSS-ul nu ajunge în bara de tab-uri,
+     deci rotunjirea trebuie făcută în imagine. -->
+<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
 <link rel="apple-touch-icon" href="${parc.logo_url}">
 
 <link rel="stylesheet" href="/assets/site.${CSS_VERSION}.css">

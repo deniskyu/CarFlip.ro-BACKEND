@@ -4,7 +4,7 @@ import { getPreset } from '../presets.js';
 import { Header, CarCard, cardVariant, CtaBand, Footer, StickyWhatsapp, ICONS } from '../components.js';
 import {
     qs, Breadcrumb, Filters, ActiveFilters, Pagination,
-    Gallery, GALLERY_JS, SpecTable, Hours, MapBlock,
+    Gallery, GALLERY_JS, SpecTable, Hours, MapBlock, regLabel,
 } from '../blocks.js';
 import { getLegalDoc } from '../legal/texts.js';
 import { autoDealerLd, vehicleLd, breadcrumbLd, itemListLd, faqLd } from '../../services/seo/jsonld.js';
@@ -104,7 +104,7 @@ export const renderMasina = (parc, d) => {
     const car = d.car;
 
     const badges = [
-        car.registration_status,
+        regLabel(car.registration_status),
         car.exchange_accepted ? 'Acceptă schimb' : null,
         car.for_dismante ? { warn: true, text: 'Pentru dezmembrare' } : null,
     ].filter(Boolean);
@@ -135,7 +135,7 @@ export const renderMasina = (parc, d) => {
       ${car.description ? html`
       <section style="margin-top:2rem">
         <h2 style="margin-bottom:1rem">Descriere</h2>
-        <div class="prose"><p>${car.description}</p></div>
+        <div class="prose prose-box"><p>${car.description}</p></div>
       </section>` : ''}
     </div>
 

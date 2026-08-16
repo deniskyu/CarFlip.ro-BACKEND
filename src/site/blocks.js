@@ -8,6 +8,17 @@ import { ICONS } from './components.js';
 //  `components.js`, sunt funcții pure — date în, markup afară.
 // ============================================================================
 
+/**
+ * Aplicația salvează valorile BRUTE `registered` / `unregistered`, nu
+ * etichetele afișate. Fără traducere, pe site apărea „unregistered" în
+ * engleză, în mijlocul unei pagini în română.
+ *
+ * Valoarea necunoscută se afișează ca atare: anunțuri mai vechi pot conține
+ * deja eticheta în română, iar o hartă strictă le-ar goli.
+ */
+const REG_LABELS = { registered: 'Înmatriculat', unregistered: 'Neînmatriculat' };
+export const regLabel = (v) => REG_LABELS[String(v || '').toLowerCase()] || v || '';
+
 const DAY_NAMES = ['Duminică', 'Luni', 'Marți', 'Miercuri', 'Joi', 'Vineri', 'Sâmbătă'];
 const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
@@ -51,57 +62,65 @@ export const Breadcrumb = (items) => html`
  * 200 de mărci din care 192 dau zero rezultate nu e „complet", e inutilizabil.
  */
 export const Filters = ({ filters, applied, sort, action = '/stoc' }) => {
-    const brand = applied.marca
-        ? filters.brands.find((b) => b.slug === applied.marca.slug)
-        : null;
+    const brands = filters.brands || [];
+
+    // Harta marcă → modele, trimisă o dată în pagină. Modelele vin din STOCUL
+    // real, nu din colecția `automobiles`: un dealer cu 9 BMW-uri are 3 modele,
+    // nu 60. Un apel către /api/automobiles ar fi întors și modele pentru care
+    // nu are nicio mașină, iar fiecare alegere ar duce la zero rezultate.
+    const modelMap = {};
+    for (const b of brands) modelMap[b.slug] = b.models.map((m) => ({ s: m.slug, n: m.name, c: m.count }));
 
     return html`
-<form class="filters" method="get" action="${action}">
+<form class="filters" method="get" action="${action}" id="stoc-filters">
   <div class="filters-grid">
 
     <div class="f-field">
       <label for="f-marca">Marcă</label>
       <select id="f-marca" name="marca">
         <option value="">Toate mărcile</option>
-        ${filters.brands.map((b) => html`
+        ${brands.map((b) => html`
         <option value="${b.slug}"${applied.marca?.slug === b.slug ? raw(' selected') : ''}>${b.name} (${b.count})</option>`)}
       </select>
     </div>
 
-    ${brand && brand.models.length > 1 ? html`
     <div class="f-field">
       <label for="f-model">Model</label>
-      <select id="f-model" name="model">
-        <option value="">Toate modelele ${brand.name}</option>
-        ${brand.models.map((m) => html`
-        <option value="${m.slug}"${applied.model?.slug === m.slug ? raw(' selected') : ''}>${m.name} (${m.count})</option>`)}
+      <select id="f-model" name="model" data-current="${applied.model?.slug || ''}">
+        <option value="">Alege întâi marca</option>
       </select>
-    </div>` : ''}
+    </div>
 
     <div class="f-field">
       <label for="f-pmin">Preț (€)</label>
       <div class="f-pair">
         <input id="f-pmin" type="number" inputmode="numeric" name="pret_min" placeholder="min"
-               min="0" step="100" value="${applied.pret_min ?? ''}">
+               min="0" value="${applied.pret_min ?? ''}">
         <input type="number" inputmode="numeric" name="pret_max" placeholder="max"
-               min="0" step="100" value="${applied.pret_max ?? ''}">
+               min="0" value="${applied.pret_max ?? ''}">
       </div>
     </div>
 
     <div class="f-field">
       <label for="f-amin">An fabricație</label>
       <div class="f-pair">
-        <input id="f-amin" type="number" inputmode="numeric" name="an_min" placeholder="${filters.year?.min || 'de la'}"
-               min="1950" max="2100" value="${applied.an_min ?? ''}">
-        <input type="number" inputmode="numeric" name="an_max" placeholder="${filters.year?.max || 'până la'}"
-               min="1950" max="2100" value="${applied.an_max ?? ''}">
+        <input id="f-amin" type="number" inputmode="numeric" name="an_min"
+               placeholder="${filters.year?.min || 'de la'}"
+               min="1900" max="2100" value="${applied.an_min ?? ''}">
+        <input type="number" inputmode="numeric" name="an_max"
+               placeholder="${filters.year?.max || 'până la'}"
+               min="1900" max="2100" value="${applied.an_max ?? ''}">
       </div>
     </div>
 
     <div class="f-field">
-      <label for="f-km">Kilometraj maxim</label>
-      <input id="f-km" type="number" inputmode="numeric" name="km_max" placeholder="ex. 150000"
-             min="0" step="1000" value="${applied.km_max ?? ''}">
+      <label for="f-kmin">Kilometraj</label>
+      <div class="f-pair">
+        <input id="f-kmin" type="number" inputmode="numeric" name="km_min" placeholder="min"
+               min="0" value="${applied.km_min ?? ''}">
+        <input type="number" inputmode="numeric" name="km_max" placeholder="max"
+               min="0" value="${applied.km_max ?? ''}">
+      </div>
     </div>
 
     ${filters.fuels?.length > 1 ? html`
@@ -127,12 +146,91 @@ export const Filters = ({ filters, applied, sort, action = '/stoc' }) => {
 
   </div>
 
+  <p class="f-error" id="f-error" hidden></p>
+
   <div class="filters-actions">
     <button class="btn btn--primary" type="submit">Caută</button>
-    ${Object.keys(applied).length ? html`<a class="f-reset" href="${action}">Șterge filtrele</a>` : ''}
+    <a class="btn btn--ghost" href="${action}">Șterge filtrele</a>
   </div>
-</form>`;
+</form>
+
+<script id="stoc-models" type="application/json">${raw(JSON.stringify(modelMap).replace(/</g, '\\u003c'))}</script>
+<script>${raw(FILTERS_JS)}</script>`;
 };
+
+/**
+ * Scriptul filtrelor. Două lucruri, ambele mici:
+ *   1. modelele se populează la alegerea mărcii, din harta de mai sus
+ *   2. intervalele se verifică înainte de trimitere (min ≤ max)
+ *
+ * Valorile de preț și kilometraj NU au `step`. Cu `step="100"`, browserul
+ * respingea 12.450 cu „cele mai apropiate valori valide sunt 12.400 și
+ * 12.500" — exact genul de mesaj care face utilizatorul să creadă că site-ul
+ * e stricat.
+ */
+export const FILTERS_JS = `
+(function(){
+  var f = document.getElementById('stoc-filters');
+  if(!f) return;
+  var bs = document.getElementById('f-marca'), ms = document.getElementById('f-model');
+  var node = document.getElementById('stoc-models');
+  var MAP = {};
+  try { MAP = JSON.parse(node.textContent); } catch(e){}
+
+  function fill(keep){
+    var list = MAP[bs.value] || [];
+    ms.innerHTML = '';
+    if(!bs.value || list.length === 0){
+      ms.innerHTML = '<option value="">' + (bs.value ? 'Fara modele' : 'Alege intai marca') + '</option>';
+      ms.disabled = true;
+      return;
+    }
+    ms.disabled = false;
+    var o = document.createElement('option');
+    o.value = ''; o.textContent = 'Toate modelele';
+    ms.appendChild(o);
+    list.forEach(function(m){
+      var x = document.createElement('option');
+      x.value = m.s; x.textContent = m.n + ' (' + m.c + ')';
+      if(keep && keep === m.s) x.selected = true;
+      ms.appendChild(x);
+    });
+  }
+  bs.addEventListener('change', function(){ fill(null); });
+  fill(ms.dataset.current);
+
+  var err = document.getElementById('f-error');
+  function num(name){
+    var el = f.elements[name];
+    if(!el || el.value === '') return null;
+    var n = Number(el.value);
+    return isFinite(n) ? n : null;
+  }
+  f.addEventListener('submit', function(e){
+    var problems = [];
+    var pairs = [
+      ['pret_min','pret_max','Prețul minim nu poate fi mai mare decât cel maxim.'],
+      ['an_min','an_max','Anul minim nu poate fi mai mare decât cel maxim.'],
+      ['km_min','km_max','Kilometrajul minim nu poate fi mai mare decât cel maxim.']
+    ];
+    pairs.forEach(function(p){
+      var a = num(p[0]), b = num(p[1]);
+      if(a !== null && b !== null && a > b) problems.push(p[2]);
+    });
+    if(problems.length){
+      e.preventDefault();
+      err.textContent = problems.join(' ');
+      err.hidden = false;
+      err.scrollIntoView({behavior:'smooth',block:'center'});
+      return;
+    }
+    err.hidden = true;
+    // Câmpurile goale nu ajung în URL — altfel adresa se umple cu ?pret_min=&an_max=
+    Array.prototype.forEach.call(f.elements, function(el){
+      if(el.name && el.value === '') el.disabled = true;
+    });
+  });
+})();`;
 
 /** Chip-uri cu filtrele active, fiecare cu link de eliminare. */
 export const ActiveFilters = ({ applied, query, action = '/stoc' }) => {
@@ -250,73 +348,100 @@ export const Gallery = (car) => {
     <button class="gal-thumb" type="button" data-go="${i}"
             aria-label="Fotografia ${i + 1}">
       ${m.type === 'video'
-        ? html`<span style="display:flex;align-items:center;justify-content:center;height:100%">▶</span>`
+        ? html`<span class="gal-thumb-v">▶</span>`
         : html`<img src="${m.url}" alt="" width="84" height="63" loading="lazy" decoding="async">`}
     </button>`)}
   </div>` : ''}
 </div>
 
+<!-- Lightbox: pistă cu scroll-snap, exact ca galeria principală.
+     Toate fotografiile sunt în DOM, iar navigarea o face BROWSERUL prin
+     derulare nativă. Nu mai există niciun handler de touch, deci nu mai poate
+     exista conflict între gestul de swipe și pinch-to-zoom. -->
 <dialog class="lb" id="lb">
-  <div class="lb-stage" id="lb-stage"><img id="lb-img" src="" alt=""></div>
+  <div class="lb-track" id="lb-track">
+    ${media.filter((m) => m.type !== 'video').map((m) => html`
+    <div class="lb-slide"><img src="${m.url}" alt="${m.alt}" loading="lazy" decoding="async"></div>`)}
+  </div>
   <button class="lb-close" id="lb-close" aria-label="Închide">&times;</button>
-  ${media.length > 1 ? html`
+  ${media.filter((m) => m.type !== 'video').length > 1 ? html`
   <button class="lb-nav lb-prev" id="lb-prev" aria-label="Anterioara">‹</button>
   <button class="lb-nav lb-next" id="lb-next" aria-label="Următoarea">›</button>
   <span class="lb-count" id="lb-count"></span>` : ''}
 </dialog>`;
 };
 
-/** Scriptul lightbox-ului. Injectat inline, doar pe pagina de mașină. */
+/**
+ * Scriptul galeriei — mult mai mic decât înainte.
+ *
+ * ── DE CE S-A RESCRIS ─────────────────────────────────────────────────────
+ * Varianta veche intercepta `touchstart`/`touchend` ca să detecteze swipe și
+ * dublu-tap pentru zoom. Pe telefon asta se bătea cu pinch-ul nativ: începeai
+ * să apropii degetele, browserul interpreta mișcarea ca swipe și sărea la
+ * fotografia alăturată.
+ *
+ * Acum navigarea e derulare nativă cu scroll-snap, iar zoom-ul e cel al
+ * browserului. Zero handlere de touch → zero conflict. Rămân doar: deschidere,
+ * închidere, săgeți pentru desktop, tastatură și contorul.
+ */
 export const GALLERY_JS = `
 (function(){
-  var main=document.getElementById('gal-main');
-  var lb=document.getElementById('lb');
-  if(!main||!lb||!lb.showModal)return;
-  var img=document.getElementById('lb-img'),stage=document.getElementById('lb-stage');
-  var count=document.getElementById('lb-count');
-  var pics=[].slice.call(main.querySelectorAll('img[data-lb]'));
-  if(!pics.length)return;
-  var i=0;
-  function show(n){
-    i=(n+pics.length)%pics.length;
-    img.src=pics[i].src; img.alt=pics[i].alt||'';
-    stage.classList.remove('is-zoomed');
-    if(count)count.textContent=(i+1)+' / '+pics.length;
+  var main = document.getElementById('gal-main');
+  var lb = document.getElementById('lb');
+  if(!main || !lb || !lb.showModal) return;
+
+  var track = document.getElementById('lb-track');
+  var count = document.getElementById('lb-count');
+  var pics = [].slice.call(main.querySelectorAll('img[data-lb]'));
+  var slides = [].slice.call(track.children);
+  if(!slides.length) return;
+
+  function goTo(i, smooth){
+    var s = slides[Math.max(0, Math.min(slides.length - 1, i))];
+    if(s) track.scrollTo({ left: s.offsetLeft, behavior: smooth ? 'smooth' : 'auto' });
   }
-  function open(n){show(n);lb.showModal();document.body.style.overflow='hidden';}
-  function close(){lb.close();document.body.style.overflow='';}
-  pics.forEach(function(p,n){p.addEventListener('click',function(){open(n);});});
+  function current(){
+    return Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+  }
+  function updateCount(){
+    if(count) count.textContent = (current() + 1) + ' / ' + slides.length;
+  }
+
+  function open(i){
+    lb.showModal();
+    document.body.style.overflow = 'hidden';
+    // Poziționarea se face DUPĂ deschidere: până atunci dialogul are lățime 0
+    // și offsetLeft-ul slide-urilor e greșit.
+    requestAnimationFrame(function(){ goTo(i, false); updateCount(); });
+  }
+  function close(){ lb.close(); }
+
+  pics.forEach(function(p, n){ p.addEventListener('click', function(){ open(n); }); });
+
   [].slice.call(document.querySelectorAll('[data-go]')).forEach(function(b){
-    b.addEventListener('click',function(){
-      var n=+b.dataset.go, s=main.children[n];
-      if(s)main.scrollTo({left:s.offsetLeft-main.offsetLeft,behavior:'smooth'});
+    b.addEventListener('click', function(){
+      var n = +b.dataset.go, s = main.children[n];
+      if(s) main.scrollTo({ left: s.offsetLeft - main.offsetLeft, behavior: 'smooth' });
     });
   });
-  var c=document.getElementById('lb-close'); if(c)c.addEventListener('click',close);
-  var p=document.getElementById('lb-prev'); if(p)p.addEventListener('click',function(){show(i-1);});
-  var n=document.getElementById('lb-next'); if(n)n.addEventListener('click',function(){show(i+1);});
-  lb.addEventListener('close',function(){document.body.style.overflow='';});
-  lb.addEventListener('click',function(e){if(e.target===lb||e.target===stage)close();});
-  document.addEventListener('keydown',function(e){
-    if(!lb.open)return;
-    if(e.key==='ArrowLeft')show(i-1);
-    if(e.key==='ArrowRight')show(i+1);
+
+  var c = document.getElementById('lb-close'); if(c) c.addEventListener('click', close);
+  var p = document.getElementById('lb-prev'); if(p) p.addEventListener('click', function(){ goTo(current() - 1, true); });
+  var n = document.getElementById('lb-next'); if(n) n.addEventListener('click', function(){ goTo(current() + 1, true); });
+
+  var t = null;
+  track.addEventListener('scroll', function(){
+    if(t) clearTimeout(t);
+    t = setTimeout(updateCount, 90);
+  }, { passive: true });
+
+  lb.addEventListener('close', function(){ document.body.style.overflow = ''; });
+  lb.addEventListener('click', function(e){ if(e.target === lb) close(); });
+  document.addEventListener('keydown', function(e){
+    if(!lb.open) return;
+    if(e.key === 'ArrowLeft') goTo(current() - 1, true);
+    if(e.key === 'ArrowRight') goTo(current() + 1, true);
   });
-  // Dublu-tap / dublu-clic pentru zoom, peste pinch-ul nativ al browserului.
-  img.addEventListener('dblclick',function(){stage.classList.toggle('is-zoomed');});
-  var last=0;
-  img.addEventListener('touchend',function(e){
-    var t=Date.now(); if(t-last<300){stage.classList.toggle('is-zoomed');e.preventDefault();} last=t;
-  });
-  // Swipe orizontal în lightbox.
-  var x0=null;
-  stage.addEventListener('touchstart',function(e){x0=e.touches[0].clientX;},{passive:true});
-  stage.addEventListener('touchend',function(e){
-    if(x0===null||stage.classList.contains('is-zoomed'))return;
-    var dx=e.changedTouches[0].clientX-x0;
-    if(Math.abs(dx)>60)show(dx<0?i+1:i-1);
-    x0=null;
-  },{passive:true});
 })();`;
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -335,7 +460,7 @@ export const SpecTable = (car) => {
         ['Caroserie', car.body_type],
         ['Culoare', car.color],
         ['Normă poluare', car.pollution_standard],
-        ['Înmatriculare', car.registration_status],
+        ['Înmatriculare', regLabel(car.registration_status)],
         ['Volan', car.steering_wheel === 'right' ? 'Dreapta' : 'Stânga'],
         ['VIN', car.vin],
     ].filter(([, v]) => v !== null && v !== undefined && v !== '');

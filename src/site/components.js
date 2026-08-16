@@ -54,8 +54,13 @@ const NAV = [
     { href: '/contact', label: 'Contact', key: 'contact' },
 ];
 
-const Brand = (parc, size = 42) => html`
-<a class="brand" href="/">
+/**
+ * Blocul de identitate din antet. Forma logo-ului, mărimea și felul în care se
+ * afișează orașul variază cu presetarea — vezi `.brand--a/b/c/d` din
+ * stylesVariants.js. Markup-ul rămâne identic; doar clasa diferă.
+ */
+const Brand = (parc, { variant = 'a', size = 42 } = {}) => html`
+<a class="brand brand--${variant}" href="/">
   <img class="brand-logo" src="${parc.logo_url}" alt=""
        width="${size}" height="${size}" fetchpriority="high">
   <span class="brand-name">${parc.display_name}
@@ -88,8 +93,11 @@ export const Header = (parc, { current, preset } = {}) => {
         ? `${openDays[0].open} – ${openDays[0].close}`
         : null;
 
+    const bv = preset?.variants?.brand || 'a';
+    const mv = preset?.variants?.menu || 'a';
+
     return html`
-<header class="site-header hdr--${v}">
+<header class="site-header hdr--${v} menu--${mv}">
   ${v === 'c' ? html`
   <div class="hdr-strip">
     <div class="wrap hdr-strip-in">
@@ -102,7 +110,7 @@ export const Header = (parc, { current, preset } = {}) => {
   <div class="wrap">
     <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-hidden="true">
     <div class="header-inner">
-      ${Brand(parc, v === 'b' ? 46 : 42)}
+      ${Brand(parc, { variant: bv, size: bv === 'b' ? 48 : 42 })}
 
       <nav class="nav" aria-label="Meniu principal">${NavLinks(current)}</nav>
 
@@ -144,7 +152,7 @@ export const Hero = (parc, { total, preset, filters }) => {
     ] : null;
 
     return html`
-<section class="hero hero--${v}">
+<section class="hero hero--${v} hero--anim-${preset?.heroAnim || 'none'}">
   <div class="hero-media">
     <img src="${parc.banner_url}" alt="" width="1920" height="640"
          fetchpriority="high" decoding="async">
@@ -325,14 +333,7 @@ ${socials.length ? html`
   ${socials.map((s) => html`
   <a href="${s.url}" target="_blank" rel="noopener nofollow" aria-label="${s.label}">${s.icon}</a>`)}
 </div>` : ''}
-<div class="store-badges">
-  <a class="store-badge" href="${APP_STORE}" target="_blank" rel="noopener">
-    ${ICONS.apple(20)}<span>Descarcă din<b>App Store</b></span>
-  </a>
-  <a class="store-badge" href="${PLAY_STORE}" target="_blank" rel="noopener">
-    ${ICONS.play(20)}<span>Disponibilă pe<b>Google Play</b></span>
-  </a>
-</div>`;
+`;
 
     const linksBlock = html`
 <h4>Secțiuni</h4>
@@ -384,6 +385,22 @@ ${DAY_ORDER.map((d) => {
       <div class="footer-made">
         <span>© ${year} ${parc.display_name}. Toate drepturile rezervate.</span>
         <span>Site realizat de <a href="https://car-flip.com" target="_blank" rel="noopener">CarFlip</a></span>
+      </div>
+
+      <!-- Badge-urile stau lângă mențiunea CarFlip, nu sub datele de contact
+           ale dealerului: acolo păreau parte din oferta lui. Aici e limpede
+           că aplicația e a noastră. -->
+      <div class="footer-app">
+        <h4>Descarcă aplicația CarFlip</h4>
+        <p>Mii de mașini, notificări la anunțuri noi și contact direct cu vânzătorul.</p>
+        <div class="store-badges">
+          <a class="store-badge" href="${APP_STORE}" target="_blank" rel="noopener">
+            ${ICONS.apple(20)}<span>Descarcă din<b>App Store</b></span>
+          </a>
+          <a class="store-badge" href="${PLAY_STORE}" target="_blank" rel="noopener">
+            ${ICONS.play(20)}<span>Disponibilă pe<b>Google Play</b></span>
+          </a>
+        </div>
       </div>
     </div>
   </div>

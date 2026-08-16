@@ -78,7 +78,7 @@ ${Header(parc, { current: 'home', preset })}
         <p class="eyebrow">Despre noi</p>
         <h2>${parc.about_title || 'Cine suntem'}</h2>
       </div>
-      <p class="lead">${data.about_text}</p>
+      <div class="prose prose-box"><p>${data.about_text}</p></div>
       <div class="hero-actions" style="margin-top:1.6rem">
         <a class="btn btn--primary" href="/contact">${ICONS.pin(17)} Vezi unde ne găsești</a>
       </div>

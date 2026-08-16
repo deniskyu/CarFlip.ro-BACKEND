@@ -181,6 +181,108 @@ export const VARIANTS_CSS = `
 .pv-bar a:hover{text-decoration:underline}
 .pv-dot{width:11px;height:11px;border-radius:3px;flex-shrink:0}
 .pv-frame{width:100%;height:660px;border:0;display:block;background:#fff}
+
+/* ══ BLOCUL DE BRAND — 4 variante ════════════════════════════════════════ */
+/* Înainte era identic la toate presetările: logo rotund, nume, oraș dedesubt.
+   Antetul e primul lucru pe care îl vede omul; dacă e la fel peste tot, toate
+   site-urile par același șablon. */
+
+/* a — logo rotund, nume peste oraș (varianta clasică) */
+.brand--a .brand-logo{border-radius:50%}
+
+/* b — logo pătrat rotunjit, mai mare, oraș ca etichetă sub nume */
+.brand--b .brand-logo{border-radius:calc(var(--radius) * .55);width:48px;height:48px;padding:4px}
+.brand--b .brand-name{font-size:1.12rem}
+.brand--b .brand-city{
+  display:inline-block;margin-top:.15rem;padding:.1rem .45rem;
+  border-radius:100px;background:var(--accent-soft);color:var(--accent);
+  font-size:.62rem;letter-spacing:.1em;opacity:1;
+}
+
+/* c — fără logo în antet: doar numele, mare, cu bară de accent în stânga */
+.brand--c .brand-logo{display:none}
+.brand--c .brand{padding-left:.7rem;border-left:3px solid var(--accent)}
+.brand--c .brand-name{font-size:1.08rem;text-transform:uppercase;letter-spacing:.03em}
+.brand--c .brand-city{font-size:.68rem;letter-spacing:.12em}
+
+/* d — logo încadrat, nume și oraș pe același rând, separate prin punct */
+.brand--d .brand-logo{border-radius:2px;border:2px solid var(--accent);padding:4px}
+.brand--d .brand-name{display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap}
+.brand--d .brand-city{display:inline;font-size:.7rem;letter-spacing:.14em}
+.brand--d .brand-city::before{content:'· '}
+
+/* ══ MENIUL MOBIL — 4 variante ═══════════════════════════════════════════ */
+/* Aceeași structură (checkbox + selector de vecin, zero JavaScript), dar
+   deschidere și aspect diferite. */
+
+/* a — listă simplă, linii despărțitoare */
+.menu--a .nav-mobile a{padding:.9rem .25rem}
+
+/* b — panou pe fundal de accent, linkuri mari, intrare de sus */
+.menu--b .nav-mobile{
+  background:var(--accent);margin-inline:calc(-1 * (100vw - 100%) / 2);
+  padding-inline:calc((100vw - 100%) / 2);border-top:none;
+}
+.menu--b .nav-mobile a{
+  color:var(--on-accent);font-size:1.05rem;font-weight:700;
+  padding:1rem .25rem;border-bottom-color:rgba(255,255,255,.18);
+}
+@media(prefers-reduced-motion:no-preference){
+  .menu--b .nav-toggle:checked ~ .nav-mobile{animation:menu-drop var(--t-base) var(--ease) both}
+  @keyframes menu-drop{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+}
+
+/* c — grilă de două coloane, compact, ca un panou de comenzi */
+.menu--c .nav-mobile{display:none;padding:.6rem 0 .9rem}
+.menu--c .nav-toggle:checked ~ .nav-mobile{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
+.menu--c .nav-mobile a{
+  border:var(--border-w) solid var(--border);border-radius:var(--radius-sm);
+  text-align:center;padding:.75rem .5rem;font-size:.9rem;
+}
+.menu--c .nav-mobile a:last-child{grid-column:1/-1}
+
+/* d — linkuri centrate, cu spațiu generos și linie de accent deasupra */
+.menu--d .nav-mobile{border-top:2px solid var(--accent);text-align:center}
+.menu--d .nav-mobile a{
+  padding:1.05rem .25rem;border-bottom:none;font-family:var(--font-display);
+  font-size:1.1rem;letter-spacing:var(--display-tracking);
+}
+@media(prefers-reduced-motion:no-preference){
+  .menu--d .nav-toggle:checked ~ .nav-mobile a{animation:menu-fade var(--t-base) var(--ease) both}
+  .menu--d .nav-toggle:checked ~ .nav-mobile a:nth-child(2){animation-delay:50ms}
+  .menu--d .nav-toggle:checked ~ .nav-mobile a:nth-child(3){animation-delay:100ms}
+  @keyframes menu-fade{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+}
+
+/* ══ PRESETAREA 4 — INDUSTRIAL, REDESENATĂ ═══════════════════════════════ */
+/* Era tot negru, colțuri drepte, borduri groase de 2px — arăta vechi.
+   Caracterul tehnic rămâne (tipografie condensată, etichete majuscule,
+   contrast puternic la titluri), dar pe suprafețe deschise. */
+
+/* Bandă subțire de accent în capul fiecărui card: semnătura vizuală */
+.car--c.car,.svc--row{position:relative}
+.hdr--c .hdr-strip{font-weight:700;letter-spacing:.04em}
+
+/* Etichetele de specificații, majuscule mici — limbaj de fișă tehnică */
+.car--c .car-specs{
+  font-size:.74rem;letter-spacing:.05em;text-transform:uppercase;
+  font-weight:600;
+}
+.car--c .car-title{font-size:.96rem;letter-spacing:-.005em}
+.car--c .car-price{font-size:1.2rem;letter-spacing:-.02em}
+
+/* Card cu linie de accent sus, vizibilă la hover */
+.car--c::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:var(--accent);transform:scaleX(0);transform-origin:left;
+  transition:transform var(--t-base) var(--ease);z-index:1;
+}
+.car--c:hover::before{transform:scaleX(1)}
+
+/* ══ ANIMAȚIA BANNERULUI ═════════════════════════════════════════════════ */
+/* Clasele .hero--anim-* sunt definite în styles.js. Aici doar nota:
+   presetarea Compact (#2) primește 'none' deliberat — are hero-ul cel mai
+   scurt, cu un rând de cifre dedesubt, iar mișcarea ar distrage de la ele. */
 `;
 
 export default { VARIANTS_CSS };
