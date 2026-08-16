@@ -71,6 +71,18 @@ app.use(helmet({
     // R2 servește imaginile de pe alt origin. Politica implicită same-origin
     // a lui helmet ar bloca încărcarea lor cross-origin în unele browsere.
     crossOriginResourcePolicy: { policy: 'cross-origin' },
+
+    // ⚠️ OBLIGATORIU pentru panoul dealerului.
+    //
+    // Implicit, helmet pune `Referrer-Policy: no-referrer`, deci browserul nu
+    // trimite antetul Referer la POST-ul unui formular. Safari pe iOS nu
+    // trimite nici Origin la formulare same-origin, iar verificarea CSRF
+    // rămâne fără nimic de comparat → orice login era respins cu
+    // „origine invalidă".
+    //
+    // `same-origin` trimite Referer DOAR către propriul site și îl ascunde
+    // complet față de site-uri terțe. Confidențialitatea nu scade.
+    referrerPolicy: { policy: 'same-origin' },
 }));
 
 
@@ -82,6 +94,12 @@ app.set('trust proxy', 2);
 app.use('/.well-known', express.static(path.join(process.cwd(), 'public/.well-known')));
 
 app.use(express.json());
+
+// Formularele HTML din panoul dealerului trimit `application/x-www-form-urlencoded`,
+// nu JSON. Fără parserul ăsta, `req.body` rămâne gol și loginul eșuează cu
+// „Completează emailul și parola" chiar dacă ai completat corect.
+// E prima formă HTML din aplicație — restul e API mobil pe JSON.
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 const version = 2;
 
@@ -103,9 +121,11 @@ app.use((req, res, next) => {
 
 app.use(resolveParc);
 
-// API-ul și SEO-ul site-urilor, ÎNAINTE de ruta de test.
-// Ordinea contează: garda anti-scurgere din siteTestRoute oprește orice cale
-// nerezolvată, deci rutele reale trebuie să apuce request-ul primele.
+// ── Site-urile de parcuri auto ──────────────────────────────────────────────
+// ORDINEA E OBLIGATORIE. Garda anti-scurgere din siteRoute oprește cu 404 orice
+// cale nerezolvată pe un subdomeniu, deci rutele reale trebuie să apuce
+// request-ul înaintea ei. Iar `indexRoute` rămâne ÎNTOTDEAUNA ultima: acolo stau
+// paginile CarFlip, care n-au ce căuta pe site-ul unui dealer.
 app.use(siteApiRoute);
 app.use(siteSeoRoute);
 

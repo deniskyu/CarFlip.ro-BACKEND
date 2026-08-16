@@ -19,6 +19,10 @@ import { parseCookies, readSession, COOKIE_NAME, destroySession, clearSessionCoo
 const ROOT_DOMAIN = (process.env.SITE_ROOT_DOMAIN || 'car-flip.com').toLowerCase();
 const DEBUG = process.env.SITE_DEBUG_HEADER === 'true';
 
+// Marker de versiune. Dacă în `pm2 logs` NU apare linia asta la pornire,
+// rulează încă fișierul vechi — fie nu a fost copiat, fie nu s-a repornit.
+console.log('🔐 [authDealer] v3 încărcat · checkOrigin tolerant la lipsa Origin/Referer');
+
 export const loadDealer = async (req, res, next) => {
     req.dealer = null;
     try {
@@ -122,11 +126,24 @@ export const checkOrigin = (req, res, next) => {
     if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
 
     const raw = req.headers.origin || req.headers.referer;
+
+    // ── Când browserul nu trimite NICIUN indiciu de origine ─────────────────
+    // Se întâmplă real: Safari pe iOS omite `Origin` la formulare same-origin,
+    // iar un `Referrer-Policy: no-referrer` (implicitul lui helmet) suprimă și
+    // `Referer`. Respingerea ar bloca utilizatori legitimi.
+    //
+    // Nu rămânem descoperiți: cookie-ul de sesiune are `SameSite=Lax`, deci
+    // browserul NU îl trimite la un POST venit de pe alt site. O cerere CSRF
+    // ajunge aici fără sesiune, iar `requireDealer` o respinge oricum.
+    //
+    // Recomandat: `referrerPolicy: { policy: 'same-origin' }` în helmet, ca
+    // Referer să existe și verificarea să fie efectivă. Vezi server.js.
     if (!raw) {
-        // Fără Origin ȘI fără Referer: nu e un browser modern făcând o cerere
-        // normală. Respingem, în loc să presupunem că e în regulă.
-        console.warn(`[checkOrigin] Fără Origin/Referer pe ${req.method} ${req.originalUrl}`);
-        return res.status(403).json({ success: false, message: 'Cerere respinsă (lipsește originea).' });
+        console.warn(
+            `[checkOrigin] Fără Origin/Referer pe ${req.method} ${req.originalUrl} — ` +
+            `permis pe baza SameSite=Lax. Verifică referrerPolicy din helmet.`
+        );
+        return next();
     }
 
     const oHost = originHostOf(raw);
