@@ -43,17 +43,6 @@ body{
   overflow-x:hidden;
 }
 
-/* Spațiul pentru butonul sticky stă ÎN FOOTER, nu pe body.
-   Pe body producea o fâșie sub footer care arăta culoarea paginii (albă pe
-   presetările deschise) — se vedea ca o bandă goală sub subsolul închis la
-   culoare. În footer, spațiul are aceeași culoare cu el și dispare vizual. */
-.site-footer{
-  padding-bottom:calc(clamp(2.4rem,1.8rem + 2.4vw,3.6rem) + 64px + env(safe-area-inset-bottom,0px));
-}
-@media(min-width:900px){
-  .site-footer{ padding-bottom:clamp(2.4rem,1.8rem + 2.4vw,3.6rem); }
-}
-
 h1,h2,h3,.display{
   font-family:var(--font-display);
   font-weight:var(--display-weight);
@@ -273,8 +262,18 @@ h3{font-size:clamp(1.1rem,.98rem + .55vw,1.4rem)}
   background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);min-height:46px}
 
 /* ── Footer ──────────────────────────────────────────────────────────────── */
+/* ⚠️ padding-TOP și padding-BOTTOM separat, nu 'padding-block'.
+   'padding-block' le setează pe amândouă, iar spațiul pentru butonul sticky
+   trebuie să fie DOAR jos.
+   Spațiul stă în footer, nu pe 'body': pe body producea o fâșie sub subsol
+   care arăta culoarea paginii (albă pe presetările deschise) — se vedea ca o
+   bandă goală. În footer are aceeași culoare cu el și dispare vizual. */
 .site-footer{background:var(--footer-bg);color:var(--footer-text);
-  padding-block:clamp(2.4rem,1.8rem + 2.4vw,3.6rem)}
+  padding-top:clamp(2.4rem,1.8rem + 2.4vw,3.6rem);
+  padding-bottom:calc(clamp(2.4rem,1.8rem + 2.4vw,3.6rem) + 64px + env(safe-area-inset-bottom,0px))}
+@media(min-width:900px){
+  .site-footer{padding-bottom:clamp(2.4rem,1.8rem + 2.4vw,3.6rem)}
+}
 .footer-grid{display:grid;gap:2rem;grid-template-columns:1fr}
 @media(min-width:700px){.footer-grid{grid-template-columns:1.4fr 1fr 1fr}}
 .footer-brand{display:flex;align-items:center;gap:.75rem;margin-bottom:.9rem}
