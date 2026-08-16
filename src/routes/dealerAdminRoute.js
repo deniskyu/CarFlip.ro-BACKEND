@@ -16,6 +16,7 @@ import {
     createSession, destroySession, setSessionCookie, clearSessionCookie,
 } from '../services/dealerSession.js';
 import { validateSaleFields, validateSaleFiles, sanitize } from '../validation/saleValidation.js';
+import { isValidIcon, DEFAULT_ICON } from '../utils/serviceIcons.js';
 import { addMediaToQueue, addMediaUpdateToQueue } from '../mediaProcessing/mediaQueue.js';
 import { onStockChange } from '../services/seo/onStockChange.js';
 import { deleteSaleCompletely } from '../services/saleDeletion.js';
@@ -420,6 +421,30 @@ dealerAdmin.post('/admin/setari', dealerActionLimiter, checkOrigin, wrap(uploadB
         }
         if (b.phone) parc.phone = b.phone;         // setter-ul normalizează
         if (b.whatsapp) parc.whatsapp = b.whatsapp;
+
+        // ── Serviciile ──────────────────────────────────────────────────────
+        // Se editează DOAR dacă parcul are deja exact trei. Dealerul nu poate
+        // adăuga sau elimina secțiunea — asta rămâne la CarFlip, ca structura
+        // paginii să nu se schimbe sub el.
+        //
+        // Toate cele trei trebuie completate: un card gol ar lăsa un spațiu
+        // vizibil în grilă. Dacă vreunul lipsește, se ignoră tot blocul și
+        // serviciile rămân neatinse.
+        if (Array.isArray(parc.services) && parc.services.length === 3) {
+            const parsed = [];
+            for (let i = 0; i < 3; i++) {
+                const title = sanitize(b[`svc_title_${i}`]).slice(0, 40);
+                const text = sanitize(b[`svc_text_${i}`]).slice(0, 180);
+                const icon = sanitize(b[`svc_icon_${i}`]);
+                if (!title || !text) { parsed.length = 0; break; }
+                parsed.push({
+                    icon: isValidIcon(icon) ? icon : (parc.services[i]?.icon || DEFAULT_ICON),
+                    title, text,
+                });
+            }
+            if (parsed.length === 3) parc.services = parsed;
+            if ('services_title' in b) parc.services_title = sanitize(b.services_title).slice(0, 60);
+        }
 
         let oldBanner = null;
         if (req.file) {

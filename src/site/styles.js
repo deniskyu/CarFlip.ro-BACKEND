@@ -40,11 +40,19 @@ body{
   font-family:var(--font-body);
   font-size:16px;line-height:1.6;
   -webkit-font-smoothing:antialiased;
-  /* Bara sticky de contact acoperă finalul paginii pe mobil. */
-  padding-bottom:calc(64px + env(safe-area-inset-bottom,0px));
   overflow-x:hidden;
 }
-@media(min-width:900px){body{padding-bottom:0}}
+
+/* Spațiul pentru butonul sticky stă ÎN FOOTER, nu pe body.
+   Pe body producea o fâșie sub footer care arăta culoarea paginii (albă pe
+   presetările deschise) — se vedea ca o bandă goală sub subsolul închis la
+   culoare. În footer, spațiul are aceeași culoare cu el și dispare vizual. */
+.site-footer{
+  padding-bottom:calc(clamp(2.4rem,1.8rem + 2.4vw,3.6rem) + 64px + env(safe-area-inset-bottom,0px));
+}
+@media(min-width:900px){
+  .site-footer{ padding-bottom:clamp(2.4rem,1.8rem + 2.4vw,3.6rem); }
+}
 
 h1,h2,h3,.display{
   font-family:var(--font-display);
@@ -150,8 +158,12 @@ h3{font-size:clamp(1.1rem,.98rem + .55vw,1.4rem)}
 .hero-media img{width:100%;height:100%;object-fit:cover;object-position:center}
 /* Gradient întunecat AUTOMAT, neconfigurabil. Rezolvă definitiv problema
    „text alb pe cer alb", indiferent ce banner urcă dealerul. */
+/* Pe mobil, gradientul e cu câteva procente mai închis. Bannerele făcute cu
+   telefonul sunt afișate la lățime mare pe un ecran mic și dens, iar lipsa de
+   claritate se vede mai puțin pe un fundal mai închis. Diferența e subtilă
+   intenționat — nu compensează o poză de rezoluție mică, doar o îmblânzește. */
 .hero-scrim{position:absolute;inset:0;z-index:-1;
-  background:linear-gradient(180deg,rgba(0,0,0,.30) 0%,rgba(0,0,0,.16) 38%,rgba(0,0,0,.82) 100%)}
+  background:linear-gradient(180deg,rgba(0,0,0,.38) 0%,rgba(0,0,0,.24) 38%,rgba(0,0,0,.86) 100%)}
 @media(min-width:900px){
   .hero-scrim{background:
     linear-gradient(90deg,rgba(0,0,0,.80) 0%,rgba(0,0,0,.46) 48%,rgba(0,0,0,.12) 100%),

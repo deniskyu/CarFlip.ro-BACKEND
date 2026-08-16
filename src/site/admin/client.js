@@ -76,6 +76,65 @@ if(bs && ms){
   if(bs.value) loadModels(ms.dataset.current);
 }
 
+/* ── Previzualizarea iconiței de serviciu ──────────────────────────────── */
+/* Iconițele sunt deja în pagină, în fiecare <select>. Le luăm de acolo la
+   schimbare, în loc să cerem serverul — sunt 16 SVG-uri statice. */
+[].slice.call(document.querySelectorAll('.svc-edit-icon select')).forEach(function(sel){
+  sel.addEventListener('change', function(){
+    var host = sel.parentNode.querySelector('.svc-edit-preview');
+    if(!host) return;
+    // Cerem markup-ul de la server o singură dată, prin reîncărcarea paginii
+    // după salvare. Până atunci, marcăm vizual că s-a schimbat.
+    host.style.opacity = '.45';
+    host.title = 'Iconița se actualizează după salvare';
+  });
+});
+
+/* ── Actualizarea listei de mașini ─────────────────────────────────────── */
+var reloadBtn = document.getElementById('reload-btn');
+if(reloadBtn){
+  reloadBtn.addEventListener('click', function(){
+    reloadBtn.disabled = true;
+    var ico = reloadBtn.querySelector('.reload-ico');
+    if(ico) ico.classList.add('spin');
+    // Fără parametrii de mesaj din URL: altfel „Anunț publicat" reapare la
+    // fiecare actualizare, deși nu s-a mai publicat nimic.
+    window.location = window.location.pathname;
+  });
+}
+
+/* Reîmprospătare automată cât timp există anunțuri în procesare.
+   Pozele se optimizează în fundal, iar dealerul altfel ar trebui să apese
+   refresh la nesfârșit ca să afle când e gata. Se oprește după 5 încercări
+   (~2,5 minute) ca să nu reîncarce pagina la infinit dacă ceva s-a blocat. */
+var procMsg = document.getElementById('processing-msg');
+if(procMsg && procMsg.dataset.auto === '1'){
+  var tries = parseInt(sessionStorage.getItem('cf_auto_reload') || '0', 10);
+  if(tries < 5){
+    setTimeout(function(){
+      sessionStorage.setItem('cf_auto_reload', String(tries + 1));
+      window.location = window.location.pathname;
+    }, 30000);
+  } else {
+    var note = document.getElementById('auto-note');
+    if(note) note.textContent = 'Durează mai mult decât de obicei. Apasă „Actualizează" peste câteva minute.';
+  }
+} else {
+  sessionStorage.removeItem('cf_auto_reload');
+}
+
+/* ── Curățarea marcajului de eroare pe măsură ce se completează ────────── */
+document.addEventListener('input', function(e){
+  if(e.target.classList && e.target.classList.contains('is-invalid')) {
+    e.target.classList.remove('is-invalid');
+  }
+}, true);
+document.addEventListener('change', function(e){
+  if(e.target.classList && e.target.classList.contains('is-invalid')) {
+    e.target.classList.remove('is-invalid');
+  }
+}, true);
+
 /* ── Județ → oraș ──────────────────────────────────────────────────────── */
 /* Orașele vin dintr-un bloc JSON inline, nu dintr-un apel de rețea: lista e
    fixă, ~6 KB, iar un fetch în plus la fiecare deschidere de formular n-ar
@@ -226,10 +285,79 @@ if(form){
   form.addEventListener('submit', function(e){
     e.preventDefault();
     var isNew = form.dataset.mode === 'new';
+
+    /* ── Verificarea proprie a câmpurilor ──────────────────────────────────
+       Formularul are novalidate: bulele native apar sub antetul sticky și pe
+       iOS Safari lipsesc complet la select. Aici arătăm TOATE câmpurile lipsă
+       deodată, ca listă de linkuri, și marcăm fiecare câmp în roșu. */
+    var box   = document.getElementById('form-errors');
+    var title = document.getElementById('form-errors-title');
+    var list  = document.getElementById('form-errors-list');
+    var problems = [];
+
+    // Etichetă lizibilă: textul din <span> al câmpului, fără contorul de caractere.
+    function labelOf(el){
+      var wrap = el.closest('.af');
+      var sp = wrap && wrap.querySelector('span');
+      if(!sp) return el.name || 'Câmp';
+      var clone = sp.cloneNode(true);
+      var c = clone.querySelector('.acount');
+      if(c) c.remove();
+      return clone.textContent.trim();
+    }
+
+    form.querySelectorAll('.is-invalid').forEach(function(el){ el.classList.remove('is-invalid'); });
+
+    form.querySelectorAll('[required]').forEach(function(el){
+      // Câmpurile dezactivate nu se validează (ex. modelul, până se alege marca).
+      if(el.disabled) return;
+      if(String(el.value || '').trim() === ''){
+        el.classList.add('is-invalid');
+        problems.push({ el: el, text: labelOf(el) });
+      }
+    });
+
+    // Depășirile de lungime: le prinde și serverul, dar mai bine aici.
+    form.querySelectorAll('[data-count]').forEach(function(el){
+      var wrap = el.closest('.af'), out = wrap && wrap.querySelector('.acount');
+      var max = out ? parseInt(out.dataset.max, 10) : 0;
+      if(max && el.value.length > max){
+        el.classList.add('is-invalid');
+        problems.push({ el: el, text: labelOf(el) + ' — prea lung (' + el.value.length + '/' + max + ')' });
+      }
+    });
+
     if(isNew && picked.length === 0){
-      alert('Adaugă cel puțin o fotografie.');
+      problems.push({ el: document.getElementById('files'), text: 'Cel puțin o fotografie' });
+    }
+
+    if(problems.length){
+      title.textContent = problems.length === 1
+        ? 'Mai lipsește un câmp:'
+        : 'Mai lipsesc ' + problems.length + ' câmpuri:';
+      list.innerHTML = '';
+      problems.forEach(function(p){
+        var li = document.createElement('li');
+        var a = document.createElement('a');
+        a.href = '#';
+        a.textContent = p.text;
+        a.onclick = function(ev){
+          ev.preventDefault();
+          if(!p.el) return;
+          var target = p.el.id === 'files' ? p.el.closest('.ac') : p.el;
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          if(p.el.focus && p.el.id !== 'files') setTimeout(function(){ p.el.focus(); }, 350);
+        };
+        li.appendChild(a);
+        list.appendChild(li);
+      });
+      box.hidden = false;
+      box.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
+
+    box.hidden = true;
+
     var btn = document.getElementById('submit-btn');
     var bar = document.getElementById('pbar'), pinfo = document.getElementById('pinfo');
     var fd = new FormData(form);

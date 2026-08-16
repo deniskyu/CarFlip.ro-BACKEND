@@ -1,5 +1,12 @@
 // ============================================================================
-//  src/site/admin/styles.js
+//  src/site/admin/stylesAdmin.js
+// ----------------------------------------------------------------------------
+//  REDENUMIT din `styles.js` ca să nu se confunde cu `src/site/styles.js`,
+//  care e foaia de stil a SITE-URILOR publice. Sunt două fișiere complet
+//  diferite, cu roluri diferite:
+//
+//    src/site/styles.js        → site-urile dealerilor (public, 6 presetări)
+//    src/site/admin/stylesAdmin.js → panoul dealerului (privat, temă unică)
 // ----------------------------------------------------------------------------
 //  Foaia de stil a panoului dealerului. Independentă de tema site-ului:
 //  panoul e o unealtă de lucru, nu o vitrină. Aceeași interfață pentru toate
@@ -156,6 +163,76 @@ h1,h2,h3{margin:0;line-height:1.2}
 .ov-b{background:#fff;border-radius:14px;padding:1.4rem;max-width:400px;width:100%}
 .ov-b h3{font-size:1.05rem;margin-bottom:.6rem;color:#991b1b}
 .ov-b p{font-size:.9rem;color:#3f3f46;margin-bottom:1.1rem;line-height:1.6}
+
+/* ── Editorul de servicii ──────────────────────────────────────────────── */
+.svc-edit{
+  border:1px solid #e4e4e7;
+  border-radius:12px;
+  padding:1rem;
+  margin-bottom:.9rem;
+  background:#fafafa;
+}
+.svc-edit-head{
+  display:flex;
+  align-items:center;
+  gap:.7rem;
+  margin-bottom:.9rem;
+}
+.svc-edit-no{
+  width:26px;height:26px;flex-shrink:0;
+  border-radius:50%;
+  background:#e4e4e7;
+  color:#52525b;
+  font-size:13px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+}
+.svc-edit-icon{
+  display:flex;align-items:center;gap:.6rem;
+  flex:1;min-width:0;
+}
+.svc-edit-preview{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:38px;height:38px;flex-shrink:0;
+  border-radius:10px;
+  background:#e0edff;
+  color:#2563eb;
+}
+.svc-edit-icon select{
+  flex:1;min-width:0;
+  padding:.6rem .7rem;min-height:42px;
+  border:1px solid #d4d4d8;border-radius:10px;
+  background:#fff;font-size:15px;
+}
+.svc-edit .af:last-child{ margin-bottom:0; }
+
+/* ── Câmpuri invalide ──────────────────────────────────────────────────── */
+.af input.is-invalid, .af select.is-invalid, .af textarea.is-invalid{
+  border-color:#dc2626;
+  background:#fef2f2;
+  box-shadow:0 0 0 3px rgba(220,38,38,.10);
+}
+
+/* Sumarul de erori. 'scroll-margin-top' compensează antetul sticky: fără el,
+   derularea către un câmp l-ar ascunde exact sub bara de sus. */
+#form-errors{ scroll-margin-top:120px; }
+#form-errors ul{ margin:.5rem 0 0; padding-left:1.15rem; }
+#form-errors li{ margin-bottom:.3rem; }
+#form-errors a{
+  color:#991b1b;
+  text-decoration:underline;
+  text-underline-offset:2px;
+}
+#form-errors a:hover{ color:#7f1d1d; }
+.af, .ac{ scroll-margin-top:120px; }
+
+/* ── Butonul de actualizare ────────────────────────────────────────────── */
+.reload-ico{ display:inline-block; font-size:1.05em; line-height:1; }
+.reload-ico.spin{ animation:cf-spin 700ms linear infinite; }
+@keyframes cf-spin{ to{ transform:rotate(360deg); } }
+
+@media(prefers-reduced-motion:reduce){
+  .reload-ico.spin{ animation:none; }
+}
 
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 `;

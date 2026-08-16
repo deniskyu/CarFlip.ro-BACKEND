@@ -1,8 +1,9 @@
 import { html, raw, toString, styleContent } from '../html.js';
-import { ADMIN_CSS } from './styles.js';
+import { ADMIN_CSS } from './stylesAdmin.js';
 import { ADMIN_JS } from './client.js';
 import { OPTIONS, LIMITS } from '../../validation/saleValidation.js';
 import { LOCATIONS, COUNTIES } from '../../validation/locations.js';
+import { SERVICE_ICONS, ICON_NAMES, DEFAULT_ICON } from '../../utils/serviceIcons.js';
 import { formatPhoneDisplay } from '../../utils/phone.js';
 
 // ============================================================================
@@ -64,6 +65,20 @@ const Msg = (type, text, list) => {
 
 const Counter = (max) => html`<span class="acount" data-max="${max}">0/${max}</span>`;
 
+// Anii, generați identic cu aplicația: anul curent, apoi 90 în urmă.
+/** Iconiță SVG inline, ca previzualizarea din panou să arate exact ca pe site. */
+const svcIcon = (name, size = 20) => {
+    const icon = SERVICE_ICONS[name] || SERVICE_ICONS[DEFAULT_ICON];
+    return raw(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" ` +
+        `viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ` +
+        `stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon.body}</svg>`);
+};
+
+const YEARS = (() => {
+    const y = new Date().getFullYear();
+    return Array.from({ length: 91 }, (_, i) => String(y - i));
+})();
+
 const Select = (name, list, selected, { placeholder = 'Alege...', id = null } = {}) => html`
 <select name="${name}" required${id ? raw(` id="${id}"`) : ''}>
   <option value="">${placeholder}</option>
@@ -124,14 +139,24 @@ export const renderList = (parc, { cars, processing, flash }) => Shell({
     <h1>Mașinile mele</h1>
     <p class="amuted">${cars.length} ${cars.length === 1 ? 'anunț activ' : 'anunțuri active'}</p>
   </div>
-  <a class="b b-pri" href="/admin/adauga">+ Adaugă mașină</a>
+  <div class="arow-btn" style="flex:0 0 auto">
+    <button class="b b-ghost" type="button" id="reload-btn" aria-label="Reîmprospătează lista">
+      <span class="reload-ico">↻</span> Actualizează
+    </button>
+    <a class="b b-pri" href="/admin/adauga">+ Adaugă mașină</a>
+  </div>
 </div>
 
 ${flash ? Msg(flash.type, flash.text) : ''}
 
-${processing > 0 ? Msg('info',
-  `${processing} ${processing === 1 ? 'anunț se procesează' : 'anunțuri se procesează'}. ` +
-  `Pozele se optimizează în fundal — apar pe site în câteva minute.`) : ''}
+${processing > 0 ? html`
+<div class="msg msg-info" id="processing-msg" data-auto="1">
+  ${processing} ${processing === 1 ? 'anunț se procesează' : 'anunțuri se procesează'}.
+  Pozele se optimizează în fundal — apar pe site în câteva minute.
+  <span class="amuted" id="auto-note" style="display:block;margin-top:.3rem;font-size:.82rem">
+    Pagina se actualizează singură.
+  </span>
+</div>` : ''}
 
 ${cars.length === 0 ? html`
 <div class="ac" style="text-align:center;padding:2.5rem 1rem">
@@ -194,9 +219,19 @@ export const renderCarForm = (parc, { car, brands, errors, flash } = {}) => {
 ${flash ? Msg(flash.type, flash.text) : ''}
 ${errors?.length ? Msg('err', 'Verifică următoarele:', errors) : ''}
 
-<form id="car-form" method="post" enctype="multipart/form-data"
+<!-- novalidate: preluăm validarea în JavaScript.
+     Bulele native ale browserului apar sub antetul sticky (z-index 30) și pe
+     iOS Safari nu se afișează deloc la select — utilizatorul apasă Publică și
+     pare că butonul e mort. Verificarea proprie arată TOATE câmpurile lipsă
+     deodată, cu linkuri către ele. -->
+<form id="car-form" method="post" enctype="multipart/form-data" novalidate
       action="${isEdit ? `/admin/masina/${v.id}` : '/admin/adauga'}"
       data-mode="${isEdit ? 'edit' : 'new'}">
+
+  <div class="msg msg-err" id="form-errors" hidden>
+    <strong id="form-errors-title"></strong>
+    <ul id="form-errors-list"></ul>
+  </div>
 
   <div class="ac">
     <h2>Mașina</h2>
@@ -229,8 +264,7 @@ ${errors?.length ? Msg('err', 'Verifică următoarele:', errors) : ''}
 
     <div class="arow-3">
       <label class="af"><span>An fabricație</span>
-        <input type="number" name="production_year" required inputmode="numeric"
-               min="1950" max="${new Date().getFullYear() + 1}" value="${v.production_year || ''}"></label>
+        ${Select('production_year', YEARS, v.production_year, { placeholder: 'Alege anul...' })}</label>
       <label class="af"><span>Kilometraj</span>
         <input type="number" name="mileage" required inputmode="numeric" min="0"
                placeholder="ex. 145000" value="${v.mileage || ''}"></label>
@@ -419,6 +453,52 @@ ${errors?.length ? Msg('err', 'Verifică următoarele:', errors) : ''}
     </label>
     <div class="thumbs" id="banner-thumb"></div>
   </div>
+
+  ${(parc.services || []).length === 3 ? html`
+  <div class="ac">
+    <h2>Serviciile tale</h2>
+    <p class="amuted" style="margin-bottom:1rem">
+      Apar pe prima pagină, sub mașini. Scrie concret ce oferi — „Garanție 12 luni"
+      spune mai mult decât „Servicii de calitate".
+    </p>
+
+    <label class="af">
+      <span>Titlu secțiune ${Counter(60)}</span>
+      <input type="text" name="services_title" maxlength="70" data-count
+             value="${parc.services_title || 'Ce oferim'}">
+    </label>
+
+    ${parc.services.map((sv, i) => html`
+    <div class="svc-edit">
+      <div class="svc-edit-head">
+        <span class="svc-edit-no">${i + 1}</span>
+        <label class="svc-edit-icon">
+          <span class="svc-edit-preview">${svcIcon(sv.icon, 20)}</span>
+          <select name="svc_icon_${i}">
+            ${ICON_NAMES.map((n) => html`
+            <option value="${n}"${sv.icon === n ? raw(' selected') : ''}>${SERVICE_ICONS[n].label}</option>`)}
+          </select>
+        </label>
+      </div>
+      <label class="af">
+        <span>Titlu ${Counter(40)}</span>
+        <input type="text" name="svc_title_${i}" maxlength="50" data-count
+               required value="${sv.title || ''}">
+      </label>
+      <label class="af" style="margin-bottom:0">
+        <span>Descriere ${Counter(180)}</span>
+        <textarea name="svc_text_${i}" maxlength="220" rows="3" data-count
+                  required>${sv.text || ''}</textarea>
+      </label>
+    </div>`)}
+  </div>` : html`
+  <div class="ac">
+    <h2>Servicii</h2>
+    <p class="amuted">
+      Secțiunea de servicii nu e activată pe site-ul tău. Scrie-ne dacă vrei să
+      o adăugăm — trei lucruri care te diferențiază, cu iconiță și descriere.
+    </p>
+  </div>`}
 
   <div class="ac">
     <h2>Contact</h2>
