@@ -76,6 +76,56 @@ if(bs && ms){
   if(bs.value) loadModels(ms.dataset.current);
 }
 
+/* ── Județ → oraș ──────────────────────────────────────────────────────── */
+/* Orașele vin dintr-un bloc JSON inline, nu dintr-un apel de rețea: lista e
+   fixă, ~6 KB, iar un fetch în plus la fiecare deschidere de formular n-ar
+   aduce nimic. */
+var countySel = document.getElementById('county-sel');
+var citySel   = document.getElementById('city-sel');
+var locNode   = document.getElementById('loc-data');
+if (countySel && citySel && locNode) {
+  var LOC = {};
+  try { LOC = JSON.parse(locNode.textContent); } catch (e) {}
+
+  function fillCities(keep) {
+    var list = LOC[countySel.value] || [];
+    citySel.innerHTML = '';
+    if (!countySel.value) {
+      citySel.innerHTML = '<option value="">Alege întâi județul</option>';
+      return;
+    }
+    var o0 = document.createElement('option');
+    o0.value = ''; o0.textContent = 'Alege orașul...';
+    citySel.appendChild(o0);
+    list.forEach(function(c){
+      var o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      if (keep && keep === c) o.selected = true;
+      citySel.appendChild(o);
+    });
+  }
+  countySel.addEventListener('change', function(){ fillCities(null); });
+  fillCities(citySel.dataset.current);
+}
+
+/* ── Combustibil ⇄ capacitate ──────────────────────────────────────────── */
+/* Oglindește comportamentul din aplicație: alegerea unuia îl setează pe
+   celălalt. Serverul verifică oricum coerența, deci asta e doar comoditate —
+   nu o poate ocoli cineva care manipulează formularul. */
+var fuelSel = document.getElementById('fuel-sel');
+var capSel  = document.getElementById('cap-sel');
+if (fuelSel && capSel) {
+  var ELECTRIC_CAP = 'Fără (Electric)';
+  fuelSel.addEventListener('change', function(){
+    if (fuelSel.value === 'Electric') { capSel.value = ELECTRIC_CAP; }
+    else if (capSel.value === ELECTRIC_CAP) { capSel.value = ''; }
+  });
+  capSel.addEventListener('change', function(){
+    if (capSel.value === ELECTRIC_CAP) { fuelSel.value = 'Electric'; }
+    else if (fuelSel.value === 'Electric') { fuelSel.value = ''; }
+  });
+}
+
 /* ── Compresie ─────────────────────────────────────────────────────────── */
 function compress(file){
   return new Promise(function(resolve){

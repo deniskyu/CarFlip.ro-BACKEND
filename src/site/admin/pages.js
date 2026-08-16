@@ -2,6 +2,7 @@ import { html, raw, toString, styleContent } from '../html.js';
 import { ADMIN_CSS } from './styles.js';
 import { ADMIN_JS } from './client.js';
 import { OPTIONS, LIMITS } from '../../validation/saleValidation.js';
+import { LOCATIONS, COUNTIES } from '../../validation/locations.js';
 import { formatPhoneDisplay } from '../../utils/phone.js';
 
 // ============================================================================
@@ -63,8 +64,8 @@ const Msg = (type, text, list) => {
 
 const Counter = (max) => html`<span class="acount" data-max="${max}">0/${max}</span>`;
 
-const Select = (name, list, selected, { placeholder = 'Alege...' } = {}) => html`
-<select name="${name}" required>
+const Select = (name, list, selected, { placeholder = 'Alege...', id = null } = {}) => html`
+<select name="${name}" required${id ? raw(` id="${id}"`) : ''}>
   <option value="">${placeholder}</option>
   ${list.map((o) => {
       const v = typeof o === 'string' ? o : o.v;
@@ -239,14 +240,18 @@ ${errors?.length ? Msg('err', 'Verifică următoarele:', errors) : ''}
     </div>
 
     <div class="arow-3">
-      <label class="af"><span>Capacitate (cm³)</span>
-        <input type="text" name="engine_capacity" required inputmode="numeric"
-               placeholder="ex. 1995" value="${v.engine_capacity || ''}"></label>
+      <label class="af"><span>Combustibil</span>
+        ${Select('engine_fuel', OPTIONS.fuel, v.engine_fuel, { id: 'fuel-sel' })}</label>
+      <label class="af"><span>Capacitate motor</span>
+        ${Select('engine_capacity', OPTIONS.capacity, v.engine_capacity, { id: 'cap-sel' })}</label>
       <label class="af"><span>Putere (CP)</span>
-        <input type="number" name="horsepower" inputmode="numeric" min="1"
+        <input type="number" name="horsepower" inputmode="numeric" min="1" max="9999"
                placeholder="opțional" value="${v.horsepower || ''}"></label>
-      <label class="af"><span>Combustibil</span>${Select('engine_fuel', OPTIONS.fuel, v.engine_fuel)}</label>
     </div>
+    <small class="amuted" style="display:block;margin:-.4rem 0 .9rem">
+      Aceleași opțiuni ca în aplicație. La combustibil electric, capacitatea se
+      completează singură cu „Fără (Electric)".
+    </small>
 
     <div class="arow-3">
       <label class="af"><span>Cutie de viteze</span>${Select('transmission', OPTIONS.transmission, v.transmission)}</label>
@@ -289,15 +294,29 @@ ${errors?.length ? Msg('err', 'Verifică următoarele:', errors) : ''}
   <div class="ac">
     <h2>Contact și locație</h2>
     <div class="arow-3">
-      <label class="af"><span>Oraș</span>
-        <input type="text" name="city" required value="${v.city || parc.city}"></label>
       <label class="af"><span>Județ</span>
-        <input type="text" name="county" required value="${v.county || parc.county}"></label>
+        <select name="county" id="county-sel" required>
+          <option value="">Alege județul...</option>
+          ${COUNTIES.map((c) => html`
+          <option value="${c}"${(v.county || parc.county) === c ? raw(' selected') : ''}>${c}</option>`)}
+        </select></label>
+      <label class="af"><span>Oraș</span>
+        <select name="city" id="city-sel" required data-current="${v.city || parc.city || ''}">
+          <option value="">Alege întâi județul</option>
+        </select></label>
       <label class="af"><span>Telefon</span>
-        <input type="tel" name="phone_number" required inputmode="tel"
+        <input type="tel" name="phone_number" required inputmode="tel" maxlength="10"
                value="${v.phone_number || formatPhoneDisplay(parc.phone)}"></label>
     </div>
+    <small class="amuted">
+      Aceleași județe și orașe ca în aplicație. Locația greșită scoate anunțul
+      din filtrele de pe site și din feed.
+    </small>
   </div>
+
+<script id="loc-data" type="application/json">${raw(JSON.stringify(
+    LOCATIONS.reduce((acc, l) => { acc[l.judet] = l.orase; return acc; }, {})
+  ).replace(/</g, '\\u003c'))}</script>
 
   <div class="ac">
     <h2>Fotografii</h2>
