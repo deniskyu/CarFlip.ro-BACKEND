@@ -2,6 +2,7 @@ import { addMonths, addDays, subDays } from 'date-fns';
 import sales from '../models/salesModel.js';
 import parcuri from '../models/parcModel.js';
 import { invalidateStockFilters } from '../services/stockFilters.js';
+import { toOidList } from '../utils/oid.js';
 
 // ============================================================================
 //  src/cronJobs/parcMaintenance.js
@@ -164,7 +165,7 @@ export const reportStaleSales = async () => {
 
     try {
         const rows = await sales.aggregate([
-            { $match: { user_id: { $in: userIds }, is_active: true, createdAt: { $lte: cutoff } } },
+            { $match: { user_id: { $in: toOidList(userIds) }, is_active: true, createdAt: { $lte: cutoff } } },
             { $group: { _id: '$user_id', n: { $sum: 1 }, oldest: { $min: '$createdAt' } } },
             { $sort: { n: -1 } },
         ]);

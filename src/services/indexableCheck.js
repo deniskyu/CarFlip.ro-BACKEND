@@ -1,4 +1,5 @@
 import sales from '../models/salesModel.js';
+import { toOidList } from '../utils/oid.js';
 import parcuri from '../models/parcModel.js';
 import { invalidateParcCache } from './parcCache.js';
 
@@ -43,8 +44,9 @@ export const getStockStats = async (userIds) => {
     const map = new Map();
     if (!Array.isArray(userIds) || userIds.length === 0) return map;
 
+    // `aggregate` nu castează — vezi src/utils/oid.js
     const rows = await sales.aggregate([
-        { $match: { user_id: { $in: userIds }, is_active: true } },
+        { $match: { user_id: { $in: toOidList(userIds) }, is_active: true } },
         {
             $group: {
                 _id: '$user_id',

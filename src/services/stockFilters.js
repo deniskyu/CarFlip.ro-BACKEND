@@ -1,6 +1,7 @@
 import sales from '../models/salesModel.js';
 import redisCache from '../config/redisCache.js';
 import { slugify } from '../utils/slug.js';
+import { toOid } from '../utils/oid.js';
 
 // ============================================================================
 //  src/services/stockFilters.js
@@ -34,8 +35,16 @@ export const BRAND_PAGE_MIN = 3;
 export const MODEL_PAGE_MIN = 2;
 
 const buildFilters = async (userId) => {
+    // ⚠️ `aggregate` NU castează prin schemă, spre deosebire de `find`.
+    // Fără `toOid`, un `user_id` venit ca șir (din cache-ul Redis) nu se
+    // potrivește cu ObjectId-ul din BSON și agregarea întoarce zero rânduri —
+    // fără nicio eroare. Vezi src/utils/oid.js.
+    const uid = toOid(userId);
+    if (!uid) return { total: 0, brands: [], price: { min: 0, max: 0 },
+                       year: { min: 0, max: 0 }, km: { min: 0, max: 0 }, fuels: [] };
+
     const rows = await sales.aggregate([
-        { $match: { user_id: userId, is_active: true } },
+        { $match: { user_id: uid, is_active: true } },
         {
             $group: {
                 _id: { brandId: '$brand.id', brandName: '$brand.name', modelId: '$model.id', modelName: '$model.name' },

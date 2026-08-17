@@ -1,4 +1,5 @@
 import redisCache from '../config/redisCache.js';
+import mongoose from 'mongoose';
 import parcuri from '../models/parcModel.js';
 
 // ============================================================================
@@ -34,6 +35,38 @@ const key = (sub) => `${PREFIX}${sub}`;
  * @param {string} subdomain
  * @returns {Promise<object|null>} obiect public (fără `notes`) sau null
  */
+/**
+ * Reface tipurile pierdute la trecerea prin JSON.
+ *
+ * ── DE CE E OBLIGATORIU ───────────────────────────────────────────────────
+ * `JSON.stringify(ObjectId)` produce un ȘIR. La citirea din cache, `user_id`
+ * și `_id` nu mai sunt ObjectId.
+ *
+ * Pentru `find()` nu se vede: Mongoose castează filtrul prin schemă. Dar
+ * `aggregate()` NU castează — pipeline-ul pleacă neatins către MongoDB, iar
+ * în BSON un șir nu e egal cu un ObjectId. Rezultatul: aceleași date, două
+ * răspunsuri diferite. Lista de mașini afișa corect, în timp ce numărătoarea
+ * și filtrele ziceau zero.
+ *
+ * Și părea aleator: prima vizită după invalidare lovea Mongo (ObjectId, mergea),
+ * următoarele 300 de secunde loveau Redis (șir, nu mergea).
+ *
+ * Reparat AICI, la ieșirea din cache, nu în fiecare loc care folosește parcul:
+ * un consumator nou nu are cum să uite conversia.
+ */
+const OID_FIELDS = ['_id', 'user_id'];
+
+const rehydrate = (parc) => {
+    if (!parc || typeof parc !== 'object') return parc;
+    for (const f of OID_FIELDS) {
+        const v = parc[f];
+        if (typeof v === 'string' && mongoose.Types.ObjectId.isValid(v)) {
+            parc[f] = new mongoose.Types.ObjectId(v);
+        }
+    }
+    return parc;
+};
+
 export const getParcBySubdomain = async (subdomain) => {
     if (typeof subdomain !== 'string' || !subdomain.trim()) return null;
     const sub = subdomain.trim().toLowerCase();
@@ -42,7 +75,7 @@ export const getParcBySubdomain = async (subdomain) => {
     try {
         const cached = await redisCache.get(key(sub));
         if (cached === MISS) return null;
-        if (cached) return JSON.parse(cached);
+        if (cached) return rehydrate(JSON.parse(cached));
     } catch (err) {
         // Redis jos sau valoare coruptă → mergem la Mongo. Nu e o eroare fatală.
     }
